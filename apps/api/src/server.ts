@@ -32,12 +32,27 @@ export async function buildServer(
     origin: (origin, cb) => {
       // Allow requests with no origin (server-to-server, curl, smoke tests)
       if (!origin) return cb(null, true);
+
       const allowed = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:4000",
+        "http://127.0.0.1:4000",
       ];
-      if (allowed.includes(origin) || process.env.NODE_ENV !== "production") {
+
+      if (process.env.WEB_ORIGIN) {
+        const configured = process.env.WEB_ORIGIN.split(",").map((o) =>
+          o.trim().replace(/\/+$/, ""),
+        );
+        allowed.push(...configured);
+      }
+
+      const normalizedOrigin = origin.replace(/\/+$/, "");
+      if (
+        allowed.includes(normalizedOrigin) ||
+        normalizedOrigin.endsWith(".vercel.app") ||
+        process.env.NODE_ENV !== "production"
+      ) {
         return cb(null, true);
       }
       return cb(new Error("Not allowed by CORS"), false);

@@ -29,6 +29,42 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const queryClient = new QueryClient();
 
+async function parseJsonResponse<T>(
+  res: Response,
+  url: string,
+): Promise<{ data: T | null; error?: string }> {
+  let text = "";
+  try {
+    text = await res.text();
+  } catch (readErr) {
+    console.error(`Failed to read response from ${url}:`, readErr);
+    return {
+      data: null,
+      error: "Cannot reach the server. Please try again in a moment.",
+    };
+  }
+
+  let json: T | null = null;
+  try {
+    json = JSON.parse(text) as T;
+  } catch {
+    console.error(`Non-JSON response (HTTP ${res.status}) from ${url}`);
+    return {
+      data: null,
+      error: "Cannot reach the server. Please try again in a moment.",
+    };
+  }
+
+  if (!res.ok) {
+    const errorMsg =
+      (json as { message?: string })?.message ||
+      `Request failed with status ${res.status}`;
+    return { data: null, error: errorMsg };
+  }
+
+  return { data: json };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,35 +75,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         typeof window !== "undefined"
           ? localStorage.getItem("accessToken")
           : null;
-      const res = await fetch("/api/v1/auth/me", {
+      const url = "/api/v1/auth/me";
+      const res = await fetch(url, {
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
+      const parsed = await parseJsonResponse<{ user: User }>(res, url);
+      if (res.ok && parsed.data?.user) {
+        setUser(parsed.data.user);
       } else {
         // Attempt token refresh
-        const refreshRes = await fetch("/api/v1/auth/refresh", {
+        const refreshUrl = "/api/v1/auth/refresh";
+        const refreshRes = await fetch(refreshUrl, {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
         });
-        if (refreshRes.ok) {
-          const refreshData = await refreshRes.json();
-          if (refreshData.accessToken) {
-            localStorage.setItem("accessToken", refreshData.accessToken);
+        const refreshParsed = await parseJsonResponse<{
+          accessToken: string;
+          user: User;
+        }>(refreshRes, refreshUrl);
+        if (refreshRes.ok && refreshParsed.data?.user) {
+          if (refreshParsed.data.accessToken) {
+            localStorage.setItem("accessToken", refreshParsed.data.accessToken);
           }
-          setUser(refreshData.user);
+          setUser(refreshParsed.data.user);
         } else {
           setUser(null);
           localStorage.removeItem("accessToken");
         }
       }
-    } catch {
+    } catch (err) {
+      console.error("Auth me check failed:", err);
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -80,25 +122,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
+    const url = "/api/v1/auth/login";
     try {
-      const res = await fetch("/api/v1/auth/login", {
+      const res = await fetch(url, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.message || "Login failed" };
+      const parsed = await parseJsonResponse<{
+        accessToken?: string;
+        user?: User;
+        message?: string;
+      }>(res, url);
+
+      if (!res.ok || !parsed.data) {
+        return {
+          success: false,
+          error:
+            parsed.error ||
+            "Cannot reach the server. Please try again in a moment.",
+        };
       }
-      if (data.accessToken) {
-        localStorage.setItem("accessToken", data.accessToken);
+      if (parsed.data.accessToken) {
+        localStorage.setItem("accessToken", parsed.data.accessToken);
       }
-      setUser(data.user);
+      if (parsed.data.user) {
+        setUser(parsed.data.user);
+      }
       return { success: true };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Network error";
-      return { success: false, error: msg };
+      console.error(`Network error connecting to ${url}:`, err);
+      return {
+        success: false,
+        error: "Cannot reach the server. Please try again in a moment.",
+      };
     } finally {
       setIsLoading(false);
     }
@@ -108,25 +166,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role: "STUDENT" | "FACULTY" | "MENTOR" | "HOD" | "ADMIN",
   ) => {
     setIsLoading(true);
+    const url = "/api/v1/auth/demo-login";
     try {
-      const res = await fetch("/api/v1/auth/demo-login", {
+      const res = await fetch(url, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.message || "Demo login failed" };
+      const parsed = await parseJsonResponse<{
+        accessToken?: string;
+        user?: User;
+        message?: string;
+      }>(res, url);
+
+      if (!res.ok || !parsed.data) {
+        return {
+          success: false,
+          error:
+            parsed.error ||
+            "Cannot reach the server. Please try again in a moment.",
+        };
       }
-      if (data.accessToken) {
-        localStorage.setItem("accessToken", data.accessToken);
+      if (parsed.data.accessToken) {
+        localStorage.setItem("accessToken", parsed.data.accessToken);
       }
-      setUser(data.user);
-      return { success: true, user: data.user };
+      if (parsed.data.user) {
+        setUser(parsed.data.user);
+      }
+      return { success: true, user: parsed.data.user };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Network error";
-      return { success: false, error: msg };
+      console.error(`Network error connecting to ${url}:`, err);
+      return {
+        success: false,
+        error: "Cannot reach the server. Please try again in a moment.",
+      };
     } finally {
       setIsLoading(false);
     }
@@ -139,6 +213,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
       });
+    } catch (err) {
+      console.error("Logout request failed:", err);
     } finally {
       localStorage.removeItem("accessToken");
       setUser(null);
