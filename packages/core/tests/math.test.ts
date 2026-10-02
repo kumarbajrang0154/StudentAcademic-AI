@@ -10,9 +10,15 @@ import {
   velocity,
   velocityBand,
   negativeVelocityWarning,
+  normalizeVelocityRisk,
 } from "../src/velocity.js";
 import { percentile } from "../src/percentile.js";
-import { riskScore, academicMetricsToRiskInputs } from "../src/risk.js";
+import {
+  riskScore,
+  explainRisk,
+  academicMetricsToRiskInputs,
+  PLANNED_SESSIONS_PER_COURSE,
+} from "../src/risk.js";
 
 describe("packages/core - Attendance Calculations", () => {
   it("attendancePercent returns 100 when total sessions T = 0", () => {
@@ -271,8 +277,8 @@ describe("packages/core - Risk Score Engine", () => {
     const extremeLow = riskScore({
       attendance: -20,
       mastery: -10,
-      velocity: -5,
-      submission: 0,
+      velocity: 0,
+      submission: -5,
     });
     expect(extremeLow.score).toBe(0);
     expect(extremeLow.category).toBe("SAFE");
@@ -292,6 +298,106 @@ describe("packages/core - Risk Score Engine", () => {
     expect(inputs.attendance).toBe(10);
     expect(inputs.mastery).toBe(15);
     expect(inputs.submission).toBe(5);
-    expect(inputs.velocity).toBe(30); // 50 - 0.4*50 = 30
+    expect(inputs.velocity).toBe(0); // v = +0.4 is positive improvement -> 0 risk
+  });
+
+  it("normalizes velocity risk accurately with clamp(-v/3*100, 0, 100)", () => {
+    // Zero velocity -> 0 risk
+    expect(normalizeVelocityRisk(0)).toBe(0);
+
+    // Negative velocity: declining
+    expect(normalizeVelocityRisk(-1.5)).toBe(50); // -(-1.5)/3 * 100 = 50
+    expect(normalizeVelocityRisk(-3.0)).toBe(100); // -(-3)/3 * 100 = 100
+    expect(normalizeVelocityRisk(-0.3)).toBe(10); // -(-0.3)/3 * 100 = 10
+
+    // Boundaries / Extreme values clamp to [0, 100]
+    expect(normalizeVelocityRisk(-4.5)).toBe(100);
+    expect(normalizeVelocityRisk(0.5)).toBe(0);
+    expect(normalizeVelocityRisk(1.5)).toBe(0);
+  });
+
+  it("uses normalizeVelocityRisk inside riskScore for raw velocity values", () => {
+    // When raw velocity v = -1.5 is supplied, normalized velocity risk is 50
+    const res = riskScore({
+      attendance: 0,
+      mastery: 0,
+      velocity: -1.5,
+      submission: 0,
+    });
+    // 50 * 0.15 = 7.5
+    expect(res.score).toBe(7.5);
+    expect(res.breakdown.velocityContribution).toBe(7.5);
+  });
+
+  it("exports PLANNED_SESSIONS_PER_COURSE constant as 30", () => {
+    expect(PLANNED_SESSIONS_PER_COURSE).toBe(30);
+  });
+
+  describe("explainRisk - Explainable AI (XAI) Attribution", () => {
+    it("ensures risk-increasing factor percentages sum to exactly 100", () => {
+      const inputs = {
+        attendance: 60, // contribution: 60 * 0.35 = 21.0
+        mastery: 70, // contribution: 70 * 0.35 = 24.5
+        velocity: 40, // contribution: 40 * 0.15 = 6.0
+        submission: 10, // riskValue 10 (< 30) -> protective
+      };
+
+      const explanation = explainRisk(inputs);
+      expect(explanation.riskIncreasingFactors.length).toBe(3);
+      expect(explanation.protectiveFactors.length).toBe(1);
+
+      // Verify protective factor
+      expect(explanation.protectiveFactors[0]?.factor).toBe("submission");
+
+      // Verify sum of percentages is exactly 100
+      const sum = explanation.riskIncreasingFactors.reduce(
+        (acc, f) => acc + f.percentage,
+        0,
+      );
+      expect(Math.round(sum * 10) / 10).toBe(100.0);
+
+      // Verify sorted by highest contribution first
+      expect(explanation.riskIncreasingFactors[0]?.factor).toBe("mastery");
+      expect(explanation.riskIncreasingFactors[1]?.factor).toBe("attendance");
+      expect(explanation.riskIncreasingFactors[2]?.factor).toBe("velocity");
+    });
+
+    it("handles the conflict case (high attendance, low marks): marks top driver, attendance protective", () => {
+      // student03: 98% attendance (attendanceRisk = 2), ~20% test scores (masteryRisk = 80)
+      const conflictInputs = academicMetricsToRiskInputs(98, 20, 0, 100);
+      expect(conflictInputs.attendance).toBe(2);
+      expect(conflictInputs.mastery).toBe(80);
+      expect(conflictInputs.submission).toBe(0);
+      expect(conflictInputs.velocity).toBe(0);
+
+      const explanation = explainRisk(conflictInputs);
+
+      // Mastery must be the top driver with 100% of risk-increasing attribution
+      expect(explanation.riskIncreasingFactors.length).toBe(1);
+      expect(explanation.riskIncreasingFactors[0]?.factor).toBe("mastery");
+      expect(explanation.riskIncreasingFactors[0]?.percentage).toBe(100);
+
+      // Attendance must be returned in protective factors
+      const attProtective = explanation.protectiveFactors.find(
+        (f) => f.factor === "attendance",
+      );
+      expect(attProtective).toBeDefined();
+      expect(attProtective?.riskValue).toBe(2);
+    });
+
+    it("handles all-safe student with 0 or low risk", () => {
+      const allZeroInputs = {
+        attendance: 0,
+        mastery: 0,
+        velocity: 0,
+        submission: 0,
+      };
+      const explanation = explainRisk(allZeroInputs);
+      expect(explanation.compositeScore).toBe(0);
+      expect(explanation.category).toBe("SAFE");
+      expect(explanation.riskIncreasingFactors.length).toBe(0);
+      expect(explanation.protectiveFactors.length).toBe(4);
+    });
   });
 });
+

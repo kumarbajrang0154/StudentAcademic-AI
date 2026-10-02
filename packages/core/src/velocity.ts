@@ -55,3 +55,23 @@ export function velocityBand(v: number): VelocityBand {
 export function negativeVelocityWarning(v: number): boolean {
   return v <= -1.5;
 }
+
+/**
+ * Normalizes velocity score v into a 0-100 risk score where higher is more risky.
+ * normalizeVelocityRisk(v) = clamp(-v / 3 * 100, 0, 100)
+ *
+ * Examples:
+ * v = 0 -> 0 risk
+ * v = -1.5 -> 50 risk
+ * v <= -3.0 -> 100 risk
+ * v >= 0 -> 0 risk
+ *
+ * @param v Velocity in mastery points per day
+ * @returns Clamped risk score [0, 100]
+ */
+export function normalizeVelocityRisk(v: number): number {
+  const val = (-v / 3) * 100;
+  const clamped = Math.min(100, Math.max(0, val));
+  return Math.round(clamped * 100) / 100;
+}
+

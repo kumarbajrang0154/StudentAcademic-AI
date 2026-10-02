@@ -11,6 +11,7 @@ export {
   velocity,
   velocityBand,
   negativeVelocityWarning,
+  normalizeVelocityRisk,
   type VelocityBand,
 } from "./velocity.js";
 
@@ -18,10 +19,15 @@ export { percentile, type PercentileResult } from "./percentile.js";
 
 export {
   riskScore,
+  explainRisk,
   academicMetricsToRiskInputs,
   DEFAULT_RISK_WEIGHTS,
+  PLANNED_SESSIONS_PER_COURSE,
   type RiskCategory,
   type RiskInputs,
   type RiskWeights,
   type RiskResult,
+  type FactorAttribution,
+  type ProtectiveFactor,
+  type RiskExplanation,
 } from "./risk.js";

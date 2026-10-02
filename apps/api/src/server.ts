@@ -6,6 +6,11 @@ import rateLimit from "@fastify/rate-limit";
 import { healthRoutes, HealthRouteOptions } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import {
+  studentRoutes,
+  attendanceSimulatorRoutes,
+  studentRiskRoutes,
+} from "./routes/student.js";
+import {
   authenticate,
   requireRole,
   PERMISSION_MATRIX,
@@ -48,6 +53,18 @@ export async function buildServer(
 
   await app.register(authRoutes, {
     prefix: "/api/v1/auth",
+  });
+
+  await app.register(studentRoutes, {
+    prefix: "/api/v1/student",
+  });
+
+  await app.register(attendanceSimulatorRoutes, {
+    prefix: "/api/v1/attendance",
+  });
+
+  await app.register(studentRiskRoutes, {
+    prefix: "/api/v1/students",
   });
 
   // Scope introspection endpoint

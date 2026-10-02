@@ -40,6 +40,13 @@ enum InterventionStatus {
   NO_SHOW
 }
 
+enum ResourceType {
+  VIDEO
+  TEXTBOOK
+  NOTES
+}
+
+
 // ==========================================
 // MODELS
 // ==========================================
@@ -135,17 +142,23 @@ model CurriculumUnit {
 }
 
 model CourseEnrollment {
-  id           String   @id @default(cuid())
-  courseId     String
-  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  studentId    String
-  student      User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  semester     String
-  academicYear String
-  status       String   @default("ACTIVE")
+  id                String        @id @default(cuid())
+  courseId          String
+  course            Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  studentId         String
+  student           User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  semester          String
+  academicYear      String
+  status            String        @default("ACTIVE")
+  attendanceRate    Float?
+  masteryScore      Float?
+  velocity          Float?
+  submissionDeficit Float?
+  riskScore         Float?
+  riskCategory      RiskCategory?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   @@unique([courseId, studentId, semester, academicYear])
   @@index([courseId])
@@ -415,3 +428,17 @@ model RefreshToken {
   @@index([userId])
   @@index([tokenHash])
 }
+
+model Resource {
+  id         String       @id @default(cuid())
+  topicTag   String
+  type       ResourceType
+  title      String
+  url        String
+  chapterRef String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([topicTag])
+}
+

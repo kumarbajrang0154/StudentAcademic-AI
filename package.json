@@ -13,11 +13,13 @@
     "db:generate": "pnpm --filter @student-academic-ai/database db:generate",
     "db:migrate": "pnpm --filter @student-academic-ai/database db:migrate",
     "db:seed": "pnpm --filter @student-academic-ai/database db:seed",
-    "db:verify": "pnpm --filter @student-academic-ai/database db:verify"
+    "db:verify": "pnpm --filter @student-academic-ai/database db:verify",
+    "smoke:student": "tsx scripts/smoke-student.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",
     "prettier": "^3.5.2",
+    "tsx": "^4.23.15",
     "turbo": "^2.4.4",
     "typescript": "^5.8.2"
   }
