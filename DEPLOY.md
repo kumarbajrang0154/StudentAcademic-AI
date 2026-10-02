@@ -34,24 +34,27 @@ This guide documents the exact configuration and environment variables required 
 
 ## 1. Vercel Configuration (`apps/web`)
 
-Configure the Vercel project settings (or use root [`vercel.json`](file:///c:/Users/rajan/OneDrive/Desktop/StudentAcademic-AI/vercel.json)):
-- **Root Directory**: `apps/web` (or root with monorepo build)
+Configure the Vercel project settings:
+- **Root Directory**: `apps/web` (or monorepo root `.` with "Include files outside root directory" enabled)
 - **Framework Preset**: `Next.js`
 - **Node.js Version**: `20.x` or `22.x`
 - **Install Command**: `npm install` (executed at the monorepo root to link workspace packages)
 - **Build Command**: `npm run build -w @student-academic-ai/web` (invokes Turbo to build required packages `@student-academic-ai/core`, `@student-academic-ai/types` first, then compiles the Next.js bundle)
-- **Output Directory**: `.next`
+- **Output Directory**: `.next` (or `apps/web/.next` if root directory is `.`)
+
+> [!NOTE]
+> All proxy rewrites (`/api/:path*` -> `${API_URL}/api/:path*`) are handled strictly inside [apps/web/next.config.ts](file:///c:/Users/rajan/OneDrive/Desktop/StudentAcademic-AI/apps/web/next.config.ts). A root `vercel.json` is intentionally **not** used to eliminate any conflicting rewrites or hardcoded destinations.
 
 ### Vercel Environment Variables
 
 | Variable Name | Required | Example / Format | Purpose |
 |---|---|---|---|
-| `API_URL` | **Yes** | `https://student-academic-ai-api.onrender.com` | Target URL for the Next.js `/api/:path*` rewrite proxy. **Must be a public https URL without trailing slash**. |
+| `API_URL` | **Yes** | `https://student-academic-ai-api.onrender.com` | Target URL for the Next.js `/api/:path*` rewrite proxy. **Must be a public https URL without trailing slash**. Set ONLY via Vercel dashboard environment variables. Never commit `.env.production`. |
 | `NEXT_PUBLIC_API_URL` | No | `https://student-academic-ai-api.onrender.com` | Client-side fallback if any direct client requests are made. |
 | `NEXT_PUBLIC_ML_URL` | No | `http://localhost:8000` | Optional predictive ML service URL. |
 
 > [!IMPORTANT]
-> - `apps/web/next.config.ts` validates `API_URL` during production builds. If `API_URL` is missing or accidentally set to `localhost`/`127.0.0.1`/private IP, the build will immediately fail with `"API_URL must be a public https URL"`. This prevents deploying builds that trigger Vercel's `404 DNS_HOSTNAME_RESOLVED_PRIVATE` error.
+> - `apps/web/next.config.ts` validates `API_URL` during production builds. If `API_URL` is missing or points to `localhost`/`127.0.0.1`/private IP, the build will immediately fail with `"API_URL must be a public https URL"`. This prevents deploying builds that trigger Vercel's `404 DNS_HOSTNAME_RESOLVED_PRIVATE` error.
 > - When `API_URL` is set to your public Render URL, Vercel proxies all `/api/*` requests directly to Render. Browsers maintain first-party HttpOnly session cookies without cross-site cookie restrictions.
 
 ---
@@ -121,3 +124,16 @@ Deploy the Fastify API server as a Web Service on Render:
    - Click **Student Demo** $\rightarrow$ verifies student dashboard redirection.
    - Click **Faculty Demo**, **Mentor Demo**, **HOD Demo**, **Admin Demo**.
    - Test manual login with `student01@demo.edu` / `Demo@1234`.
+
+---
+
+## 5. Troubleshooting Matrix
+
+| Error / Symptom | Likely Cause | Exact Resolution / Fix |
+|---|---|---|
+| **Vercel 404 `DNS_HOSTNAME_RESOLVED_PRIVATE`** | The Next.js rewrite target (`API_URL`) resolved to a private/loopback IP address (`localhost`, `127.0.0.1`, `0.0.0.0`, or RFC1918 private range). Occurs when `API_URL` was unset or defaulted to localhost during the Vercel production build. | 1. Go to **Vercel Dashboard $\rightarrow$ Project Settings $\rightarrow$ Environment Variables**.<br>2. Set `API_URL` to your public Render service URL: `https://<your-api>.onrender.com` (no trailing slash).<br>3. Trigger a fresh deployment (`Redeploy`). The build guard in `next.config.ts` prevents future builds from succeeding if `API_URL` is private or unset. |
+| **`DNS_HOSTNAME_NOT_FOUND`** | `API_URL` in Vercel environment variables contains a typo, a deleted service domain, or a non-existent subdomain. | 1. Open the Render dashboard and copy the exact Web Service URL.<br>2. Update `API_URL` in Vercel Project Settings.<br>3. Redeploy the Vercel web project.<br>4. Test hostname resolution directly: `curl -i https://<your-api>.onrender.com/health`. |
+| **`502 Bad Gateway` / `503 Service Unavailable`** | 1. Render free instance is cold sleeping (first request takes 30–60s to wake up).<br>2. The Fastify API process crashed on boot (e.g. database connection failed or missing `DATABASE_URL`). | 1. Allow up to 60 seconds for Render compute to start. The UI displays: *"Server is waking up (can take up to 60s). Please retry."*<br>2. Check Render service logs for runtime exceptions or failed DB migrations.<br>3. Ensure `DATABASE_URL` and `DIRECT_URL` are valid Neon PostgreSQL strings. |
+| **`CORS error` (Cross-Origin Request Blocked)** | Direct client-side fetch bypassed the Next.js rewrite proxy, or Render's `WEB_ORIGIN` does not match the Vercel domain. | 1. In Render Web Service Environment, set `WEB_ORIGIN` to your exact Vercel frontend URL: `https://<your-app>.vercel.app` (no trailing slash).<br>2. Ensure all frontend API calls use relative paths (e.g. `/api/v1/auth/login`) so they are routed through Next.js rewrites on the same origin. |
+| **`403 Demo login is disabled`** | The backend received a demo login request at `/api/v1/auth/demo-login` but `DEMO_MODE` on Render is not set to `"true"`. | 1. In Render Dashboard $\rightarrow$ Environment, set `DEMO_MODE=true`.<br>2. Wait for the service to redeploy.<br>3. The login page automatically queries `/api/v1/auth/demo-status` and displays the quick demo role buttons only when demo mode is active. |
+

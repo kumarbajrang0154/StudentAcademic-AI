@@ -15,6 +15,11 @@ const DemoLoginSchema = z.object({
 });
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
+  // GET /demo-status
+  app.get("/demo-status", async () => {
+    return { demoMode: process.env.DEMO_MODE === "true" };
+  });
+
   // Rate-limiting: 10 requests per minute on login endpoint
   app.post(
     "/login",

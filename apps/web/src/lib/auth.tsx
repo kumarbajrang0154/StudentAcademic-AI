@@ -14,6 +14,7 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  demoMode: boolean;
   login: (
     email: string,
     password: string,
@@ -29,18 +30,35 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const queryClient = new QueryClient();
 
+function getErrorMessage(status: number, serverMsg?: string): string {
+  if (status === 401) {
+    return "Invalid credentials.";
+  }
+  if (status === 403) {
+    return "Demo login is disabled.";
+  }
+  if (status === 404) {
+    return "API route not found. Check API_URL configuration.";
+  }
+  if (status === 502 || status === 503 || status === 504 || status >= 500) {
+    return "Server is waking up (can take up to 60s). Please retry.";
+  }
+  return serverMsg || "Cannot reach the server.";
+}
+
 async function parseJsonResponse<T>(
   res: Response,
   url: string,
 ): Promise<{ data: T | null; error?: string }> {
+  const path = url.split("?")[0];
   let text = "";
   try {
     text = await res.text();
   } catch {
-    console.error(`HTTP ${res.status} from ${url}`);
+    console.error(`HTTP ${res.status} ${path}`);
     return {
       data: null,
-      error: "Cannot reach the server. Please try again in a moment.",
+      error: getErrorMessage(res.status),
     };
   }
 
@@ -48,19 +66,21 @@ async function parseJsonResponse<T>(
   try {
     json = JSON.parse(text) as T;
   } catch {
-    console.error(`HTTP ${res.status} from ${url}`);
+    // Non-JSON response (e.g. HTML 404, 502, 503)
+    console.error(`HTTP ${res.status} ${path}`);
     return {
       data: null,
-      error: "Cannot reach the server. Please try again in a moment.",
+      error: getErrorMessage(res.status),
     };
   }
 
   if (!res.ok) {
-    console.error(`HTTP ${res.status} from ${url}`);
-    const errorMsg =
-      (json as { message?: string })?.message ||
-      "Cannot reach the server. Please try again in a moment.";
-    return { data: null, error: errorMsg };
+    console.error(`HTTP ${res.status} ${path}`);
+    const serverMsg = (json as { message?: string })?.message;
+    return {
+      data: null,
+      error: getErrorMessage(res.status, serverMsg),
+    };
   }
 
   return { data: json };
@@ -69,6 +89,32 @@ async function parseJsonResponse<T>(
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [demoMode, setDemoMode] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function checkDemoStatus() {
+      try {
+        const url = "/api/v1/auth/demo-status";
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.error(`HTTP ${res.status} ${url}`);
+          return;
+        }
+        const text = await res.text();
+        const data = JSON.parse(text);
+        if (isMounted && typeof data?.demoMode === "boolean") {
+          setDemoMode(data.demoMode);
+        }
+      } catch {
+        console.error("Network error /api/v1/auth/demo-status");
+      }
+    }
+    checkDemoStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const fetchMe = async () => {
     try {
@@ -109,8 +155,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           localStorage.removeItem("accessToken");
         }
       }
-    } catch (err) {
-      console.error("Auth me check failed:", err);
+    } catch {
+      console.error("Network error /api/v1/auth/me");
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -142,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           success: false,
           error:
             parsed.error ||
-            "Cannot reach the server. Please try again in a moment.",
+            "Cannot reach the server.",
         };
       }
       if (parsed.data.accessToken) {
@@ -152,11 +198,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(parsed.data.user);
       }
       return { success: true };
-    } catch (err: unknown) {
-      console.error(`Network error connecting to ${url}:`, err);
+    } catch {
+      console.error("Network error /api/v1/auth/login");
       return {
         success: false,
-        error: "Cannot reach the server. Please try again in a moment.",
+        error: "Cannot reach the server.",
       };
     } finally {
       setIsLoading(false);
@@ -186,7 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           success: false,
           error:
             parsed.error ||
-            "Cannot reach the server. Please try again in a moment.",
+            "Cannot reach the server.",
         };
       }
       if (parsed.data.accessToken) {
@@ -196,11 +242,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(parsed.data.user);
       }
       return { success: true, user: parsed.data.user };
-    } catch (err: unknown) {
-      console.error(`Network error connecting to ${url}:`, err);
+    } catch {
+      console.error("Network error /api/v1/auth/demo-login");
       return {
         success: false,
-        error: "Cannot reach the server. Please try again in a moment.",
+        error: "Cannot reach the server.",
       };
     } finally {
       setIsLoading(false);
@@ -214,8 +260,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
       });
-    } catch (err) {
-      console.error("Logout request failed:", err);
+    } catch {
+      console.error("Network error /api/v1/auth/logout");
     } finally {
       localStorage.removeItem("accessToken");
       setUser(null);
@@ -229,6 +275,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         value={{
           user,
           isLoading,
+          demoMode,
           login,
           demoLogin,
           logout,

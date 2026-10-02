@@ -15,7 +15,7 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, demoLogin } = useAuth();
+  const { login, demoLogin, demoMode } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -139,86 +139,90 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="relative my-8 text-center">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-700"></div>
-          </div>
-          <span className="relative px-3 bg-slate-800 text-xs font-medium text-slate-400 uppercase tracking-wider">
-            Or quick demo login
-          </span>
-        </div>
+        {demoMode && (
+          <>
+            <div className="relative my-8 text-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-700"></div>
+              </div>
+              <span className="relative px-3 bg-slate-800 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                Or quick demo login
+              </span>
+            </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => handleDemoClick("STUDENT")}
-            disabled={Boolean(loadingRole)}
-            className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-indigo-400 group disabled:opacity-50"
-          >
-            {loadingRole === "STUDENT" ? (
-              <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
-            ) : (
-              <GraduationCap className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition" />
-            )}
-            <span>Student Demo</span>
-          </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => handleDemoClick("STUDENT")}
+                disabled={Boolean(loadingRole)}
+                className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-indigo-400 group disabled:opacity-50"
+              >
+                {loadingRole === "STUDENT" ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                ) : (
+                  <GraduationCap className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition" />
+                )}
+                <span>Student Demo</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => handleDemoClick("FACULTY")}
-            disabled={Boolean(loadingRole)}
-            className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-cyan-400 group disabled:opacity-50"
-          >
-            {loadingRole === "FACULTY" ? (
-              <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
-            ) : (
-              <BookOpen className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition" />
-            )}
-            <span>Faculty Demo</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => handleDemoClick("FACULTY")}
+                disabled={Boolean(loadingRole)}
+                className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-cyan-400 group disabled:opacity-50"
+              >
+                {loadingRole === "FACULTY" ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                ) : (
+                  <BookOpen className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition" />
+                )}
+                <span>Faculty Demo</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => handleDemoClick("MENTOR")}
-            disabled={Boolean(loadingRole)}
-            className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-teal-400 group disabled:opacity-50"
-          >
-            {loadingRole === "MENTOR" ? (
-              <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
-            ) : (
-              <UserCheck className="w-4 h-4 text-teal-400 group-hover:scale-110 transition" />
-            )}
-            <span>Mentor Demo</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => handleDemoClick("MENTOR")}
+                disabled={Boolean(loadingRole)}
+                className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-teal-400 group disabled:opacity-50"
+              >
+                {loadingRole === "MENTOR" ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+                ) : (
+                  <UserCheck className="w-4 h-4 text-teal-400 group-hover:scale-110 transition" />
+                )}
+                <span>Mentor Demo</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => handleDemoClick("HOD")}
-            disabled={Boolean(loadingRole)}
-            className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-amber-400 group disabled:opacity-50"
-          >
-            {loadingRole === "HOD" ? (
-              <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-            ) : (
-              <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition" />
-            )}
-            <span>HOD Demo</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => handleDemoClick("HOD")}
+                disabled={Boolean(loadingRole)}
+                className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-amber-400 group disabled:opacity-50"
+              >
+                {loadingRole === "HOD" ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition" />
+                )}
+                <span>HOD Demo</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => handleDemoClick("ADMIN")}
-            disabled={Boolean(loadingRole)}
-            className="col-span-2 flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-emerald-400 group disabled:opacity-50"
-          >
-            {loadingRole === "ADMIN" ? (
-              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-            ) : (
-              <ShieldAlert className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition" />
-            )}
-            <span>Admin Demo</span>
-          </button>
-        </div>
+              <button
+                type="button"
+                onClick={() => handleDemoClick("ADMIN")}
+                disabled={Boolean(loadingRole)}
+                className="col-span-2 flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-emerald-400 group disabled:opacity-50"
+              >
+                {loadingRole === "ADMIN" ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                ) : (
+                  <ShieldAlert className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition" />
+                )}
+                <span>Admin Demo</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

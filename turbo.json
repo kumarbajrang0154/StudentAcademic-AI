@@ -1,8 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "API_URL",
+    "NEXT_PUBLIC_API_URL",
+    "NEXT_PUBLIC_ML_URL",
+    "NODE_ENV"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["API_URL", "NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_ML_URL", "NODE_ENV"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "test": {

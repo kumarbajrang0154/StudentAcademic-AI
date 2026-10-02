@@ -204,6 +204,32 @@ describe("Auth Routes & Token Management", () => {
     await app.close();
   });
 
+  it("returns demoMode boolean on GET /api/v1/auth/demo-status", async () => {
+    const prevDemoMode = process.env.DEMO_MODE;
+    process.env.DEMO_MODE = "true";
+
+    const app = await buildServer({ db: dummyDb, redis: "disabled" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/demo-status",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body).toEqual({ demoMode: true });
+
+    process.env.DEMO_MODE = "false";
+    const resFalse = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/demo-status",
+    });
+    expect(resFalse.statusCode).toBe(200);
+    expect(JSON.parse(resFalse.body)).toEqual({ demoMode: false });
+
+    process.env.DEMO_MODE = prevDemoMode;
+    await app.close();
+  });
+
   it("enforces role guards on protected faculty route", async () => {
     const app = await buildServer({ db: dummyDb, redis: "disabled" });
 
