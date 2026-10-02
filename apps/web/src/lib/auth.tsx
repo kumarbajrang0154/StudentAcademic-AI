@@ -40,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ? localStorage.getItem("accessToken")
           : null;
       const res = await fetch("/api/v1/auth/me", {
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -52,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Attempt token refresh
         const refreshRes = await fetch("/api/v1/auth/refresh", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
         });
         if (refreshRes.ok) {
@@ -81,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch("/api/v1/auth/login", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
@@ -108,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch("/api/v1/auth/demo-login", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role }),
       });
@@ -132,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await fetch("/api/v1/auth/logout", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
       });
     } finally {

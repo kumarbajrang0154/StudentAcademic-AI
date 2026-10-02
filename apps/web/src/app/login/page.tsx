@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import {
   GraduationCap,
   BookOpen,
+  UserCheck,
   ShieldAlert,
   ShieldCheck,
   ArrowRight,
@@ -57,7 +58,7 @@ export default function LoginPage() {
   };
 
   const handleDemoClick = async (
-    role: "STUDENT" | "FACULTY" | "HOD" | "ADMIN",
+    role: "STUDENT" | "FACULTY" | "MENTOR" | "HOD" | "ADMIN",
   ) => {
     setError(null);
     setLoadingRole(role);
@@ -178,6 +179,20 @@ export default function LoginPage() {
 
           <button
             type="button"
+            onClick={() => handleDemoClick("MENTOR")}
+            disabled={Boolean(loadingRole)}
+            className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-teal-400 group disabled:opacity-50"
+          >
+            {loadingRole === "MENTOR" ? (
+              <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+            ) : (
+              <UserCheck className="w-4 h-4 text-teal-400 group-hover:scale-110 transition" />
+            )}
+            <span>Mentor Demo</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleDemoClick("HOD")}
             disabled={Boolean(loadingRole)}
             className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-amber-400 group disabled:opacity-50"
@@ -194,7 +209,7 @@ export default function LoginPage() {
             type="button"
             onClick={() => handleDemoClick("ADMIN")}
             disabled={Boolean(loadingRole)}
-            className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-emerald-400 group disabled:opacity-50"
+            className="col-span-2 flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-emerald-400 group disabled:opacity-50"
           >
             {loadingRole === "ADMIN" ? (
               <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
