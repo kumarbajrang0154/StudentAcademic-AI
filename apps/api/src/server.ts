@@ -29,7 +29,19 @@ export async function buildServer(
   });
 
   await app.register(cors, {
-    origin: true,
+    origin: (origin, cb) => {
+      // Allow requests with no origin (server-to-server, curl, smoke tests)
+      if (!origin) return cb(null, true);
+      const allowed = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:4000",
+      ];
+      if (allowed.includes(origin) || process.env.NODE_ENV !== "production") {
+        return cb(null, true);
+      }
+      return cb(new Error("Not allowed by CORS"), false);
+    },
     credentials: true,
   });
 

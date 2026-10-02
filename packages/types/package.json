@@ -16,7 +16,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@student-academic-ai/config": "workspace:*",
+    "@student-academic-ai/config": "*",
     "eslint": "^9.21.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2"

@@ -1,6 +1,6 @@
 # Student Academic AI
 
-Predictive academic monitoring platform for universities built as a high-performance monorepo using **Turborepo** and **pnpm workspaces**.
+Predictive academic monitoring platform for universities built as a high-performance monorepo using **Turborepo** and **npm workspaces**.
 
 ---
 
@@ -18,7 +18,6 @@ student-academic-ai/
 │   ├── types/           # Shared TypeScript domain types and Zod runtime schemas
 │   └── config/          # Shared ESLint flat config, Prettier config, base TSConfigs
 ├── docker-compose.yml   # PostgreSQL 16 & Redis 7 services with healthchecks and volumes
-├── pnpm-workspace.yaml  # Workspace configuration and build script authorization
 └── turbo.json           # Turborepo task pipeline (build, test, lint, typecheck)
 ```
 
@@ -27,7 +26,7 @@ student-academic-ai/
 ## Prerequisites
 
 1. **Node.js**: v20+ LTS (Tested on Node v24)
-2. **pnpm**: v10+ (Tested on pnpm v12.8.1)
+2. **npm**: v10+ (Tested on npm v11.17.0)
 3. **Docker & Docker Compose**: For local PostgreSQL 16 and Redis 7 services
 4. **Python**: 3.10+ (for `apps/ml-service`)
 
@@ -38,7 +37,7 @@ student-academic-ai/
 ### 1. Install Dependencies
 
 ```bash
-pnpm install
+npm install
 ```
 
 ### 2. Configure Environment Variables
@@ -49,9 +48,9 @@ Copy `.env.example` to `.env` in the root and in each package/app:
 # Root & packages
 cp .env.example .env
 cp packages/database/.env.example packages/database/.env
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env
-cp apps/ml-service/.env.example apps/ml-service/.env
+apps/api/.env.example apps/api/.env
+apps/web/.env.example apps/web/.env
+apps/ml-service/.env.example apps/ml-service/.env
 ```
 
 ### 3. Start Infrastructure Services
@@ -74,13 +73,13 @@ Generate the Prisma Client, run migrations, and execute the realistic academic s
 
 ```bash
 # Generate Prisma Client
-pnpm db:generate
+npm run db:generate
 
 # Apply PostgreSQL migrations
-pnpm db:migrate
+npm run db:migrate
 
 # Seed database (1 department, 1 HOD, 2 faculty, 1 mentor, 40 students, 3 courses, 20 sessions/course, 3 assessments/course with scores)
-pnpm db:seed
+npm run db:seed
 ```
 
 ---
@@ -91,19 +90,19 @@ All quality gates are enforced across the workspace:
 
 ```bash
 # 1. Run all unit tests (packages/core math engine, apps/api health check, apps/web)
-pnpm test
+npm test
 
 # 2. Compile production bundles across all apps and packages
-pnpm build
+npm run build
 
 # 3. Static type check (strict TypeScript, zero `any`)
-pnpm typecheck
+npm run typecheck
 
 # 4. ESLint verification (ESLint 9 flat config)
-pnpm lint
+npm run lint
 
 # 5. Prettier style verification
-pnpm prettier --check "**/*.{ts,tsx,json,md}"
+npx prettier --check "**/*.{ts,tsx,json,md}"
 ```
 
 ---

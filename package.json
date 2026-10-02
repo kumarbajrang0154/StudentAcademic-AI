@@ -2,7 +2,11 @@
   "name": "student-academic-ai",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@12.8.1",
+  "packageManager": "npm@11.17.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -10,10 +14,10 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "db:generate": "pnpm --filter @student-academic-ai/database db:generate",
-    "db:migrate": "pnpm --filter @student-academic-ai/database db:migrate",
-    "db:seed": "pnpm --filter @student-academic-ai/database db:seed",
-    "db:verify": "pnpm --filter @student-academic-ai/database db:verify",
+    "db:generate": "npm run db:generate -w @student-academic-ai/database",
+    "db:migrate": "npm run db:migrate -w @student-academic-ai/database",
+    "db:seed": "npm run db:seed -w @student-academic-ai/database",
+    "db:verify": "npm run db:verify -w @student-academic-ai/database",
     "smoke:student": "tsx scripts/smoke-student.ts"
   },
   "devDependencies": {

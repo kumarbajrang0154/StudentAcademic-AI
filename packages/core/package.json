@@ -15,8 +15,8 @@
     "lint": "eslint src tests --no-error-on-unmatched-pattern"
   },
   "devDependencies": {
-    "@student-academic-ai/config": "workspace:*",
-    "@student-academic-ai/types": "workspace:*",
+    "@student-academic-ai/config": "*",
+    "@student-academic-ai/types": "*",
     "eslint": "^9.21.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",

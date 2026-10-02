@@ -20,11 +20,11 @@
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
-    "@student-academic-ai/core": "workspace:*",
+    "@student-academic-ai/core": "*",
     "bcryptjs": "^3.0.3"
   },
   "devDependencies": {
-    "@student-academic-ai/config": "workspace:*",
+    "@student-academic-ai/config": "*",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.13.9",
     "eslint": "^9.21.0",
