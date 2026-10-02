@@ -3,14 +3,18 @@ import {
   Role,
   AttendanceStatus,
   InterventionStatus,
-} from "@prisma/client";
+} from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-async function main() {
-  console.log("🌱 Starting database seeding for Student Academic AI...");
+const SHARED_PASSWORD = 'Demo@1234';
+const PASSWORD_HASH = bcrypt.hashSync(SHARED_PASSWORD, 10);
 
-  // Clean existing data in reverse order of foreign keys
+async function main() {
+  console.log('🌱 Starting database seeding for Student Academic AI...');
+
+  // Clean existing data in reverse order of foreign keys for idempotency
   await prisma.auditLog.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.escalationCase.deleteMany();
@@ -37,119 +41,124 @@ async function main() {
   // 1. Department
   const department = await prisma.department.create({
     data: {
-      name: "Computer Science and Engineering",
-      code: "CSE",
+      name: 'Computer Science and Engineering',
+      code: 'CSE',
     },
   });
   console.log(`✓ Created Department: ${department.name} (${department.code})`);
 
-  // Program Outcomes (PO1, PO2)
+  // Program Outcomes (PO1)
   const po1 = await prisma.programOutcome.create({
     data: {
       departmentId: department.id,
-      code: "PO1",
-      description:
-        "Apply engineering fundamentals and mathematical principles to compute solutions.",
+      code: 'PO1',
+      description: 'Apply engineering fundamentals and mathematical principles to compute solutions.',
     },
   });
 
-  // 2. HOD
+  // 2. Admin User
+  const admin = await prisma.user.create({
+    data: {
+      email: 'admin@demo.edu',
+      name: 'System Administrator',
+      role: Role.ADMIN,
+      departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
+    },
+  });
+  console.log(`✓ Created Admin: ${admin.email}`);
+
+  // 3. HOD User
   const hod = await prisma.user.create({
     data: {
-      email: "hod.cse@university.edu",
-      name: "Dr. Alan Turing",
+      email: 'hod@demo.edu',
+      name: 'Dr. Alan Turing',
       role: Role.HOD,
       departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
     },
   });
-  console.log(`✓ Created HOD: ${hod.name}`);
+  console.log(`✓ Created HOD: ${hod.email}`);
 
-  // 3. Faculty (2 members)
+  // 4. Faculty Users (2 members)
   const faculty1 = await prisma.user.create({
     data: {
-      email: "faculty.shannon@university.edu",
-      name: "Prof. Claude Shannon",
+      email: 'faculty1@demo.edu',
+      name: 'Prof. Claude Shannon',
       role: Role.FACULTY,
       departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
     },
   });
 
   const faculty2 = await prisma.user.create({
     data: {
-      email: "faculty.hopper@university.edu",
-      name: "Prof. Grace Hopper",
+      email: 'faculty2@demo.edu',
+      name: 'Prof. Grace Hopper',
       role: Role.FACULTY,
       departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
     },
   });
-  console.log(`✓ Created 2 Faculty: ${faculty1.name}, ${faculty2.name}`);
+  console.log(`✓ Created 2 Faculty: ${faculty1.email}, ${faculty2.email}`);
 
-  // 4. Mentor (1 member)
+  // 5. Mentor User (1 member)
   const mentor = await prisma.user.create({
     data: {
-      email: "mentor.knuth@university.edu",
-      name: "Dr. Donald Knuth",
+      email: 'mentor1@demo.edu',
+      name: 'Dr. Donald Knuth',
       role: Role.MENTOR,
       departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
     },
   });
-  console.log(`✓ Created Mentor: ${mentor.name}`);
+  console.log(`✓ Created Mentor: ${mentor.email}`);
 
-  // 5. Students (40 students)
-  const students: { id: string; name: string; email: string }[] = [];
+  // 6. Students (40 students) - Batch created for high performance
+  const studentCreateData = [];
   for (let i = 1; i <= 40; i++) {
-    const padded = String(i).padStart(2, "0");
-    const student = await prisma.user.create({
-      data: {
-        email: `student${padded}@university.edu`,
-        name: `Student ${padded}`,
-        role: Role.STUDENT,
-        departmentId: department.id,
-      },
-    });
-    students.push(student);
-
-    // Assign mentor to each student
-    await prisma.mentorAssignment.create({
-      data: {
-        mentorId: mentor.id,
-        studentId: student.id,
-        active: true,
-      },
-    });
-
-    // Add guardian contact
-    await prisma.guardianContact.create({
-      data: {
-        studentId: student.id,
-        phone: `+1-555-01${padded}`,
-        consentGiven: true,
-        consentAt: new Date(),
-      },
+    const padded = String(i).padStart(2, '0');
+    studentCreateData.push({
+      email: `student${padded}@demo.edu`,
+      name: `Student ${padded}`,
+      role: Role.STUDENT,
+      departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
     });
   }
-  console.log(`✓ Created 40 Students and assigned to Mentor ${mentor.name}`);
+  await prisma.user.createMany({ data: studentCreateData });
+  const students = await prisma.user.findMany({
+    where: { role: Role.STUDENT, departmentId: department.id },
+    orderBy: { email: 'asc' },
+    select: { id: true, name: true, email: true },
+  });
 
-  // 6. Courses (3 courses)
+  const mentorAssignmentsData = [];
+  const guardianContactsData = [];
+  for (let i = 0; i < students.length; i++) {
+    const student = students[i]!;
+    const padded = String(i + 1).padStart(2, '0');
+    mentorAssignmentsData.push({
+      mentorId: mentor.id,
+      studentId: student.id,
+      active: true,
+    });
+    guardianContactsData.push({
+      studentId: student.id,
+      phone: `+1-555-01${padded}`,
+      consentGiven: true,
+      consentAt: new Date(),
+    });
+  }
+  await prisma.mentorAssignment.createMany({ data: mentorAssignmentsData });
+  await prisma.guardianContact.createMany({ data: guardianContactsData });
+  console.log(`✓ Created 40 Students (student01@demo.edu .. student40@demo.edu)`);
+
+  // 7. Courses (3 courses)
   const coursesData = [
-    {
-      code: "CS101",
-      name: "Data Structures and Algorithms",
-      credits: 4,
-      facultyId: faculty1.id,
-    },
-    {
-      code: "CS102",
-      name: "Database Management Systems",
-      credits: 4,
-      facultyId: faculty2.id,
-    },
-    {
-      code: "CS103",
-      name: "Operating Systems & Concurrency",
-      credits: 3,
-      facultyId: faculty1.id,
-    },
+    { code: 'CS101', name: 'Data Structures and Algorithms', credits: 4, facultyId: faculty1.id },
+    { code: 'CS102', name: 'Database Management Systems', credits: 4, facultyId: faculty2.id },
+    { code: 'CS103', name: 'Operating Systems & Concurrency', credits: 3, facultyId: faculty1.id },
   ];
 
   for (const cData of coursesData) {
@@ -162,12 +171,12 @@ async function main() {
       },
     });
 
-    // Curriculum Units
+    // Curriculum Unit
     const unit1 = await prisma.curriculumUnit.create({
       data: {
         courseId: course.id,
         unitNumber: 1,
-        title: "Core Foundations & Complexity Analysis",
+        title: 'Core Foundations & Complexity Analysis',
         plannedHours: 12,
       },
     });
@@ -176,7 +185,7 @@ async function main() {
     const co1 = await prisma.courseOutcome.create({
       data: {
         courseId: course.id,
-        code: "CO1",
+        code: 'CO1',
         description: `Demonstrate mastery in core concepts of ${course.name}.`,
       },
     });
@@ -195,58 +204,51 @@ async function main() {
       data: {
         courseId: course.id,
         dayOfWeek: 1, // Monday
-        startTime: "09:00",
-        endTime: "10:30",
-        room: "Lab-A101",
+        startTime: '09:00',
+        endTime: '10:30',
+        room: 'Lab-A101',
       },
     });
 
-    // Enroll all 40 students in the course
-    for (const student of students) {
-      await prisma.courseEnrollment.create({
-        data: {
-          courseId: course.id,
-          studentId: student.id,
-          semester: "Fall",
-          academicYear: "2026-2027",
-          status: "ACTIVE",
-        },
-      });
-    }
+    // Enroll all 40 students in the course (batch)
+    const enrollmentData = students.map((s) => ({
+      courseId: course.id,
+      studentId: s.id,
+      semester: 'Fall',
+      academicYear: '2026-2027',
+      status: 'ACTIVE',
+    }));
+    await prisma.courseEnrollment.createMany({ data: enrollmentData });
 
-    // 7. 20 Class Sessions per course
+    // 8. 20 Class Sessions per course (60 total)
+    const baseDate = new Date('2026-08-15T09:00:00Z');
     const sessions = [];
-    const baseDate = new Date("2026-08-15T09:00:00Z");
-
     for (let s = 1; s <= 20; s++) {
-      const sessionDate = new Date(
-        baseDate.getTime() + s * 2 * 24 * 60 * 60 * 1000,
-      );
+      const sessionDate = new Date(baseDate.getTime() + s * 2 * 24 * 60 * 60 * 1000);
       const session = await prisma.classSession.create({
         data: {
           courseId: course.id,
           facultyId: cData.facultyId,
           sessionDate,
-          startTime: "09:00",
-          endTime: "10:30",
+          startTime: '09:00',
+          endTime: '10:30',
           topic: `Lecture ${s}: Advanced concepts in ${course.name}`,
-          room: "Room-302",
+          room: 'Room-302',
         },
       });
-      sessions.push(session);
+      sessions.push({ session, s });
+    }
 
-      // Attendance records for each student
-      // Realistic distribution: mostly PRESENT, occasional ON_DUTY, ABSENT, MEDICAL_LEAVE
+    // Attendance records batch for all 20 sessions * 40 students = 800 records
+    const attendanceBatch = [];
+    for (const { session, s } of sessions) {
       for (let stIdx = 0; stIdx < students.length; stIdx++) {
         const student = students[stIdx]!;
         let status: AttendanceStatus = AttendanceStatus.PRESENT;
 
-        // Introduce variance for realistic risk testing
         const hash = (stIdx * 17 + s * 13) % 100;
         if (stIdx === 39) {
-          // Student 40 has poor attendance for risk testing
-          status =
-            hash < 60 ? AttendanceStatus.ABSENT : AttendanceStatus.PRESENT;
+          status = hash < 60 ? AttendanceStatus.ABSENT : AttendanceStatus.PRESENT;
         } else if (hash < 6) {
           status = AttendanceStatus.ABSENT;
         } else if (hash < 10) {
@@ -255,27 +257,24 @@ async function main() {
           status = AttendanceStatus.MEDICAL_LEAVE;
         }
 
-        await prisma.attendanceRecord.create({
-          data: {
-            sessionId: session.id,
-            studentId: student.id,
-            status,
-          },
+        attendanceBatch.push({
+          sessionId: session.id,
+          studentId: student.id,
+          status,
         });
       }
     }
+    await prisma.attendanceRecord.createMany({ data: attendanceBatch });
 
-    // 8. 3 Assessments per course with scores (weight validation: sum <= 100)
+    // 9. 3 Assessments per course with scores (9 total, weights: 20 + 30 + 50 = 100)
     const assessmentsSpec = [
-      { title: "Quiz 1", type: "QUIZ", maxScore: 20, weight: 20 },
-      { title: "Midterm Exam", type: "MIDTERM", maxScore: 50, weight: 30 },
-      {
-        title: "Comprehensive Project",
-        type: "PROJECT",
-        maxScore: 100,
-        weight: 50,
-      },
+      { title: 'Quiz 1', type: 'QUIZ', maxScore: 20, weight: 20 },
+      { title: 'Midterm Exam', type: 'MIDTERM', maxScore: 50, weight: 30 },
+      { title: 'Comprehensive Project', type: 'PROJECT', maxScore: 100, weight: 50 },
     ];
+
+    const studentScoresBatch = [];
+    const questionScoresBatch = [];
 
     for (const aSpec of assessmentsSpec) {
       const assessment = await prisma.assessment.create({
@@ -294,61 +293,57 @@ async function main() {
         data: {
           assessmentId: assessment.id,
           unitId: unit1.id,
-          topicTag: "Complexity Analysis",
+          topicTag: 'Complexity Analysis',
           maxScore: aSpec.maxScore,
           coId: co1.id,
         },
       });
 
-      // Score for each student
+      // Scores for each student batch
       for (let stIdx = 0; stIdx < students.length; stIdx++) {
         const student = students[stIdx]!;
-        // Score between 55% and 95%
         const scorePct = 0.55 + ((stIdx * 13 + 7) % 40) / 100;
         const actualScore = Math.round(aSpec.maxScore * scorePct * 10) / 10;
 
-        await prisma.studentScore.create({
-          data: {
-            assessmentId: assessment.id,
-            studentId: student.id,
-            score: actualScore,
-            feedback: "Evaluated according to course rubric standards.",
-          },
+        studentScoresBatch.push({
+          assessmentId: assessment.id,
+          studentId: student.id,
+          score: actualScore,
+          feedback: 'Evaluated according to course rubric standards.',
         });
 
-        await prisma.questionScore.create({
-          data: {
-            questionId: question.id,
-            studentId: student.id,
-            score: actualScore,
-          },
+        questionScoresBatch.push({
+          questionId: question.id,
+          studentId: student.id,
+          score: actualScore,
         });
       }
     }
 
-    console.log(
-      `✓ Seeded ${course.code} with 20 sessions and 3 assessments (weights: 20+30+50 = 100)`,
-    );
+    await prisma.studentScore.createMany({ data: studentScoresBatch });
+    await prisma.questionScore.createMany({ data: questionScoresBatch });
+
+    console.log(`✓ Seeded course ${course.code} with 20 sessions and 3 assessments`);
   }
 
-  // Sample Intervention for Student 40
+  // Intervention for student 40
   await prisma.intervention.create({
     data: {
       studentId: students[39]!.id,
       mentorId: mentor.id,
-      title: "Attendance & Academic Velocity Check-in",
-      description: "Review low attendance and set milestone recovery goals.",
+      title: 'Attendance & Academic Velocity Check-in',
+      description: 'Review low attendance and set milestone recovery goals.',
       status: InterventionStatus.SCHEDULED,
-      scheduledFor: new Date("2026-10-15T14:00:00Z"),
+      scheduledFor: new Date('2026-10-15T14:00:00Z'),
     },
   });
 
-  console.log("✅ Database seeding finished successfully.");
+  console.log('✅ Database seeding finished successfully.');
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Seeding error:", e);
+    console.error('❌ Seeding error:', e);
     process.exit(1);
   })
   .finally(async () => {

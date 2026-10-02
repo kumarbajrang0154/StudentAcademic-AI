@@ -7,7 +7,12 @@ export {
 
 export { courseMastery, type CourseMasteryComponent } from "./mastery.js";
 
-export { velocity, velocityBand, type VelocityBand } from "./velocity.js";
+export {
+  velocity,
+  velocityBand,
+  negativeVelocityWarning,
+  type VelocityBand,
+} from "./velocity.js";
 
 export { percentile, type PercentileResult } from "./percentile.js";
 

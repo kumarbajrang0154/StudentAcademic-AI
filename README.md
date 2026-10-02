@@ -132,11 +132,25 @@ The math engine contains pure TypeScript functions with comprehensive test cover
 
 ---
 
-## Service Endpoints
+## Module 1: Auth & RBAC
 
-- **Fastify API**: `http://localhost:4000`
-  - `GET /health` $\to$ `{"status": "ok", "db": "up", "redis": "up"}`
-- **Next.js Web**: `http://localhost:3000`
-  - Displays `"Student Academic AI"` placeholder
-- **Python ML Service**: `http://localhost:8000`
-  - `GET /health` $\to$ `{"status": "ok"}`
+### Demo Accounts
+All seeded accounts share the demo password `****`:
+
+| Role | Email | Password | Default Redirect |
+|---|---|---|---|
+| ADMIN | `admin@demo.edu` | `****` | `/admin/dashboard` |
+| HOD | `hod@demo.edu` | `****` | `/admin/dashboard` |
+| FACULTY | `faculty1@demo.edu`, `faculty2@demo.edu` | `****` | `/faculty/dashboard` |
+| MENTOR | `mentor1@demo.edu` | `****` | `/faculty/dashboard` |
+| STUDENT | `student01@demo.edu` .. `student40@demo.edu` | `****` | `/student/dashboard` |
+
+### Auth API Endpoints (`/api/v1/auth`)
+- `POST /api/v1/auth/login`: Email & password login. Returns access token (15m) and sets HttpOnly refresh cookie. Rate limited to 10 req/min.
+- `POST /api/v1/auth/demo-login`: Quick role-based login when `DEMO_MODE=true`.
+- `POST /api/v1/auth/refresh`: Rotates refresh token (48 random bytes, SHA-256 hashed). Enforces token reuse detection (revokes all user tokens if reused).
+- `POST /api/v1/auth/logout`: Revokes refresh token and clears cookie.
+- `GET /api/v1/auth/me`: Returns profile of authenticated user.
+- `GET /api/v1/_whoami-scope`: Scope inspection based on RBAC matrix.
+- `GET /api/v1/faculty/courses`: Protected route requiring `FACULTY`, `HOD`, or `ADMIN` role.
+

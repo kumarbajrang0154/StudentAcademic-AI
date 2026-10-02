@@ -14,14 +14,17 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:verify": "tsx scripts/verify-seed.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --no-error-on-unmatched-pattern"
   },
   "dependencies": {
-    "@prisma/client": "^6.4.1"
+    "@prisma/client": "^6.4.1",
+    "bcryptjs": "^3.0.3"
   },
   "devDependencies": {
     "@student-academic-ai/config": "workspace:*",
+    "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.13.9",
     "eslint": "^9.21.0",
     "prisma": "^6.4.1",

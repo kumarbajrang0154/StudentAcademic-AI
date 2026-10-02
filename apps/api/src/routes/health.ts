@@ -2,58 +2,102 @@ import { FastifyPluginAsync } from "fastify";
 import { prisma } from "@student-academic-ai/database";
 import { Redis } from "ioredis";
 
-let redisClient: Redis | null = null;
-
-function getRedisClient(): Redis {
-  if (!redisClient) {
-    const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-    redisClient = new Redis(redisUrl, {
-      maxRetriesPerRequest: 1,
-      connectTimeout: 1000,
-      lazyConnect: true,
-      retryStrategy: () => null, // don't loop endlessly if redis is down
-    });
-  }
-  return redisClient;
+export interface DatabaseClient {
+  $queryRaw: (
+    query: TemplateStringsArray,
+    ...values: unknown[]
+  ) => Promise<unknown>;
 }
 
-export const healthRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get("/health", async (_request, reply) => {
-    let dbStatus: "up" | "down" = "up";
-    let redisStatus: "up" | "down" = "up";
+export interface RedisPingClient {
+  ping: () => Promise<string>;
+}
 
-    // Verify DB connectivity
+export interface HealthRouteOptions {
+  db?: DatabaseClient;
+  redis?: RedisPingClient | "disabled" | null;
+}
+
+let defaultRedisClient: Redis | null = null;
+
+function getDefaultRedisClient(): Redis | null {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl || redisUrl.trim() === "") {
+    return null;
+  }
+
+  if (!defaultRedisClient) {
+    defaultRedisClient = new Redis(redisUrl, {
+      maxRetriesPerRequest: 1,
+      connectTimeout: 2000,
+      lazyConnect: false,
+      retryStrategy: () => null,
+    });
+  }
+  return defaultRedisClient;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs = 2000): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Operation timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+  });
+}
+
+export const healthRoutes: FastifyPluginAsync<HealthRouteOptions> = async (
+  fastify,
+  opts,
+) => {
+  fastify.get("/health", async (_request, reply) => {
+    let dbStatus: "up" | "down" = "down";
+    let redisStatus: "up" | "down" | "disabled" = "disabled";
+
+    // 1. Run real SELECT 1 against PostgreSQL with 2s timeout
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      const dbClient = opts?.db ?? prisma;
+      await withTimeout(dbClient.$queryRaw`SELECT 1`, 2000);
       dbStatus = "up";
     } catch {
-      // In offline / local mock environment without active postgres container
-      // Fallback maintains quality gate unless strictly in production
-      if (process.env.STRICT_HEALTH_CHECK === "true") {
-        dbStatus = "down";
-      } else {
-        dbStatus = "up";
-      }
+      dbStatus = "down";
     }
 
-    // Verify Redis connectivity
-    try {
-      const client = getRedisClient();
-      if (client.status !== "ready" && client.status !== "connecting") {
-        await client.connect().catch(() => {});
-      }
-      const pong = await client.ping();
-      redisStatus = pong === "PONG" ? "up" : "down";
-    } catch {
-      if (process.env.STRICT_HEALTH_CHECK === "true") {
+    // 2. Redis probe (OPTIONAL)
+    // If REDIS_URL is unset and no mock redis provided, do not create Redis client
+    let redisClient: RedisPingClient | null = null;
+    if (opts?.redis !== undefined) {
+      redisClient =
+        opts.redis === "disabled" || opts.redis === null ? null : opts.redis;
+    } else {
+      redisClient = getDefaultRedisClient();
+    }
+
+    if (!redisClient) {
+      redisStatus = "disabled";
+    } else {
+      try {
+        const pong = await withTimeout(redisClient.ping(), 2000);
+        redisStatus = pong === "PONG" ? "up" : "down";
+      } catch {
         redisStatus = "down";
-      } else {
-        redisStatus = "up";
       }
     }
 
-    return reply.status(200).send({
-      status: "ok",
+    // When Redis is disabled: 200 { status: "ok", db: "up", redis: "disabled" } if DB passes
+    const isHealthy =
+      redisStatus === "disabled"
+        ? dbStatus === "up"
+        : dbStatus === "up" && redisStatus === "up";
+
+    const statusCode = isHealthy ? 200 : 503;
+
+    return reply.status(statusCode).send({
+      status: isHealthy ? "ok" : "degraded",
       db: dbStatus,
       redis: redisStatus,
     });

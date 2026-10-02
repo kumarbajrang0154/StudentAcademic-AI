@@ -12,7 +12,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "db:generate": "pnpm --filter @student-academic-ai/database db:generate",
     "db:migrate": "pnpm --filter @student-academic-ai/database db:migrate",
-    "db:seed": "pnpm --filter @student-academic-ai/database db:seed"
+    "db:seed": "pnpm --filter @student-academic-ai/database db:seed",
+    "db:verify": "pnpm --filter @student-academic-ai/database db:verify"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",

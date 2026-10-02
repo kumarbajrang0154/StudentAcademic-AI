@@ -33,11 +33,10 @@ export const InterventionStatusEnum = z.enum([
 export type InterventionStatus = z.infer<typeof InterventionStatusEnum>;
 
 export const VelocityBandEnum = z.enum([
-  "RAPID_IMPROVEMENT",
   "IMPROVING",
   "STABLE",
   "DECLINING",
-  "RAPID_DECLINE",
+  "STEEP_DECLINE",
 ]);
 export type VelocityBand = z.infer<typeof VelocityBandEnum>;
 
@@ -108,9 +107,9 @@ export type RiskResult = z.infer<typeof RiskResultSchema>;
 // ==========================================
 
 export const HealthCheckResponseSchema = z.object({
-  status: z.literal("ok"),
+  status: z.enum(["ok", "degraded"]),
   db: z.enum(["up", "down"]),
-  redis: z.enum(["up", "down"]),
+  redis: z.enum(["up", "down", "disabled"]),
   timestamp: z.string().datetime().optional(),
   uptime: z.number().optional(),
 });

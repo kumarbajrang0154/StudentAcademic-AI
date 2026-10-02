@@ -13,10 +13,14 @@
     "lint": "eslint src --no-error-on-unmatched-pattern"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^10.0.2",
+    "@fastify/jwt": "^10.2.2",
+    "@fastify/rate-limit": "^11.2.0",
     "@student-academic-ai/core": "workspace:*",
     "@student-academic-ai/database": "workspace:*",
     "@student-academic-ai/types": "workspace:*",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "ioredis": "^5.6.0",
@@ -24,6 +28,7 @@
   },
   "devDependencies": {
     "@student-academic-ai/config": "workspace:*",
+    "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.13.9",
     "eslint": "^9.21.0",
     "tsup": "^8.4.0",

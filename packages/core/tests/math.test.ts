@@ -6,7 +6,11 @@ import {
   predictedAttendance,
 } from "../src/attendance.js";
 import { courseMastery } from "../src/mastery.js";
-import { velocity, velocityBand } from "../src/velocity.js";
+import {
+  velocity,
+  velocityBand,
+  negativeVelocityWarning,
+} from "../src/velocity.js";
 import { percentile } from "../src/percentile.js";
 import { riskScore, academicMetricsToRiskInputs } from "../src/risk.js";
 
@@ -154,15 +158,52 @@ describe("packages/core - Velocity & Velocity Bands", () => {
     );
   });
 
-  it("assigns correct velocity bands", () => {
-    expect(velocityBand(0.6)).toBe("RAPID_IMPROVEMENT");
-    expect(velocityBand(0.5)).toBe("RAPID_IMPROVEMENT");
-    expect(velocityBand(0.2)).toBe("IMPROVING");
+  it("assigns correct velocity bands with boundary thresholds", () => {
+    // v > 0.2 -> IMPROVING
+    expect(velocityBand(0.21)).toBe("IMPROVING");
+    expect(velocityBand(0.5)).toBe("IMPROVING");
+
+    // Boundary: v = 0.2 -> STABLE
+    expect(velocityBand(0.2)).toBe("STABLE");
+
+    // -0.2 <= v <= 0.2 -> STABLE
     expect(velocityBand(0.0)).toBe("STABLE");
-    expect(velocityBand(-0.05)).toBe("STABLE");
-    expect(velocityBand(-0.3)).toBe("DECLINING");
-    expect(velocityBand(-0.5)).toBe("RAPID_DECLINE");
-    expect(velocityBand(-0.8)).toBe("RAPID_DECLINE");
+    expect(velocityBand(0.1)).toBe("STABLE");
+    expect(velocityBand(-0.1)).toBe("STABLE");
+
+    // Boundary: v = -0.2 -> STABLE
+    expect(velocityBand(-0.2)).toBe("STABLE");
+
+    // -0.8 <= v < -0.2 -> DECLINING
+    expect(velocityBand(-0.21)).toBe("DECLINING");
+    expect(velocityBand(-0.5)).toBe("DECLINING");
+
+    // Boundary: v = -0.8 -> DECLINING
+    expect(velocityBand(-0.8)).toBe("DECLINING");
+
+    // v < -0.8 -> STEEP_DECLINE
+    expect(velocityBand(-0.81)).toBe("STEEP_DECLINE");
+    expect(velocityBand(-1.0)).toBe("STEEP_DECLINE");
+    expect(velocityBand(-1.5)).toBe("STEEP_DECLINE");
+
+    // API example value -1.64 must be STEEP_DECLINE
+    expect(velocityBand(-1.64)).toBe("STEEP_DECLINE");
+  });
+
+  it("evaluates negativeVelocityWarning with boundary threshold -1.5", () => {
+    // Boundary: v = -1.5 -> true
+    expect(negativeVelocityWarning(-1.5)).toBe(true);
+
+    // v < -1.5 -> true
+    expect(negativeVelocityWarning(-1.51)).toBe(true);
+
+    // v > -1.5 -> false
+    expect(negativeVelocityWarning(-1.49)).toBe(false);
+    expect(negativeVelocityWarning(-0.8)).toBe(false);
+    expect(negativeVelocityWarning(0.0)).toBe(false);
+
+    // API example value -1.64: must trigger warning = true
+    expect(negativeVelocityWarning(-1.64)).toBe(true);
   });
 });
 

@@ -15,11 +15,14 @@
     "@radix-ui/react-slot": "^1.1.2",
     "@student-academic-ai/core": "workspace:*",
     "@student-academic-ai/types": "workspace:*",
+    "@tanstack/react-query": "^5.104.0",
     "clsx": "^2.1.1",
+    "lucide-react": "^1.49.0",
     "next": "15.2.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.0.2"
+    "tailwind-merge": "^3.0.2",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@student-academic-ai/config": "workspace:*",

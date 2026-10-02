@@ -1,5 +1,5 @@
 export type VelocityBand =
-  "RAPID_IMPROVEMENT" | "IMPROVING" | "STABLE" | "DECLINING" | "RAPID_DECLINE";
+  "IMPROVING" | "STABLE" | "DECLINING" | "STEEP_DECLINE";
 
 /**
  * Calculates academic mastery velocity (rate of change in mastery per day).
@@ -21,30 +21,37 @@ export function velocity(m1: number, m2: number, days: number): number {
 }
 
 /**
- * Categorizes velocity rate into academic progression bands.
+ * Categorizes velocity rate into academic progression bands (% points per day).
  *
  * Thresholds:
- * - v >= 0.5: RAPID_IMPROVEMENT
- * - 0.1 <= v < 0.5: IMPROVING
- * - -0.1 < v < 0.1: STABLE
- * - -0.5 < v <= -0.1: DECLINING
- * - v <= -0.5: RAPID_DECLINE
+ * - v > 0.2: IMPROVING
+ * - -0.2 <= v <= 0.2: STABLE
+ * - -0.8 <= v < -0.2: DECLINING
+ * - v < -0.8: STEEP_DECLINE
  *
- * @param v Mastery velocity
+ * @param v Mastery velocity (% points per day)
  * @returns Categorized VelocityBand
  */
 export function velocityBand(v: number): VelocityBand {
-  if (v >= 0.5) {
-    return "RAPID_IMPROVEMENT";
-  }
-  if (v >= 0.1) {
+  if (v > 0.2) {
     return "IMPROVING";
   }
-  if (v > -0.1) {
+  if (v >= -0.2) {
     return "STABLE";
   }
-  if (v > -0.5) {
+  if (v >= -0.8) {
     return "DECLINING";
   }
-  return "RAPID_DECLINE";
+  return "STEEP_DECLINE";
+}
+
+/**
+ * Flags critical velocity decline warning when rate of drop is severe (e.g. over a 14-day window).
+ * Returns true when v <= -1.5.
+ *
+ * @param v Mastery velocity
+ * @returns boolean indicating if severe decline warning is triggered
+ */
+export function negativeVelocityWarning(v: number): boolean {
+  return v <= -1.5;
 }
