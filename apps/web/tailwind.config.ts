@@ -45,6 +45,10 @@ const config: Config = {
         canvas: "#FAFAFA",
         surface: "#FFFFFF",
       },
+      fontFamily: {
+        sans: ["var(--font-inter)", "Inter", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        mono: ["var(--font-mono)", "JetBrains Mono", "monospace"],
+      },
     },
   },
   plugins: [],

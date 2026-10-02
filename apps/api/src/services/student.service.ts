@@ -8,6 +8,8 @@ import {
   explainRisk,
   academicMetricsToRiskInputs,
   attendancePercent,
+  safeBunks,
+  classesToRecover,
   PLANNED_SESSIONS_PER_COURSE,
 } from "@student-academic-ai/core";
 
@@ -905,3 +907,152 @@ export async function getStudentCalendar(studentId: string) {
     })),
   };
 }
+
+export interface CourseAttendanceSummary {
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  facultyName: string;
+  conducted: number;
+  attended: number;
+  onDuty: number;
+  absent: number;
+  percentage: number;
+  status: "SAFE" | "WARNING" | "CRITICAL";
+  safeBunks: number;
+  classesToRecover: number;
+}
+
+export interface StudentAttendanceSummary {
+  studentId: string;
+  totalConducted: number;
+  totalAttended: number;
+  totalOnDuty: number;
+  totalAbsent: number;
+  overallPercentage: number;
+  overallStatus: "SAFE" | "WARNING" | "CRITICAL";
+  overallSafeBunks: number;
+  overallClassesToRecover: number;
+  courses: CourseAttendanceSummary[];
+}
+
+export async function getStudentAttendanceSummary(
+  studentId: string,
+): Promise<StudentAttendanceSummary> {
+  const enrollments = await prisma.courseEnrollment.findMany({
+    where: { studentId },
+    include: {
+      course: {
+        include: {
+          sessions: {
+            take: 1,
+            include: {
+              faculty: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { course: { code: "asc" } },
+  });
+
+  const courses: CourseAttendanceSummary[] = [];
+  let totalConducted = 0;
+  let totalAttended = 0;
+  let totalOnDuty = 0;
+  let totalAbsent = 0;
+
+  for (const enrollment of enrollments) {
+    const records = await prisma.attendanceRecord.findMany({
+      where: {
+        studentId,
+        session: { courseId: enrollment.courseId },
+      },
+      select: { status: true },
+    });
+
+    const conducted = records.length;
+    let attended = 0;
+    let onDuty = 0;
+    let absent = 0;
+
+    for (const r of records) {
+      if (r.status === AttendanceStatus.PRESENT) attended++;
+      else if (
+        r.status === AttendanceStatus.ON_DUTY ||
+        r.status === AttendanceStatus.MEDICAL_LEAVE
+      ) {
+        onDuty++;
+      } else if (r.status === AttendanceStatus.ABSENT) {
+        absent++;
+      }
+    }
+
+    totalConducted += conducted;
+    totalAttended += attended;
+    totalOnDuty += onDuty;
+    totalAbsent += absent;
+
+    const percentage = attendancePercent(attended, onDuty, conducted);
+    const bunks = safeBunks(attended, onDuty, conducted, 0.75);
+    const recover = classesToRecover(attended, onDuty, conducted, 0.75);
+    const status: "SAFE" | "WARNING" | "CRITICAL" =
+      percentage >= 75 ? "SAFE" : percentage >= 65 ? "WARNING" : "CRITICAL";
+
+    const facultyName =
+      enrollment.course.sessions[0]?.faculty?.name ?? "Faculty Member";
+
+    courses.push({
+      courseId: enrollment.courseId,
+      courseCode: enrollment.course.code,
+      courseName: enrollment.course.name,
+      facultyName,
+      conducted,
+      attended,
+      onDuty,
+      absent,
+      percentage: Math.round(percentage * 10) / 10,
+      status,
+      safeBunks: bunks,
+      classesToRecover: recover,
+    });
+  }
+
+  const overallPercentage = attendancePercent(
+    totalAttended,
+    totalOnDuty,
+    totalConducted,
+  );
+  const overallSafeBunks = safeBunks(
+    totalAttended,
+    totalOnDuty,
+    totalConducted,
+    0.75,
+  );
+  const overallClassesToRecover = classesToRecover(
+    totalAttended,
+    totalOnDuty,
+    totalConducted,
+    0.75,
+  );
+  const overallStatus: "SAFE" | "WARNING" | "CRITICAL" =
+    overallPercentage >= 75
+      ? "SAFE"
+      : overallPercentage >= 65
+        ? "WARNING"
+        : "CRITICAL";
+
+  return {
+    studentId,
+    totalConducted,
+    totalAttended,
+    totalOnDuty,
+    totalAbsent,
+    overallPercentage: Math.round(overallPercentage * 10) / 10,
+    overallStatus,
+    overallSafeBunks,
+    overallClassesToRecover,
+    courses,
+  };
+}
+

@@ -14,6 +14,7 @@ import {
   getStudentBenchmarks,
   getStudentPrescriptions,
   getStudentCalendar,
+  getStudentAttendanceSummary,
 } from "../services/student.service.js";
 
 const StudentIdQuerySchema = z.object({
@@ -284,6 +285,38 @@ export const studentRoutes: FastifyPluginAsync = async (app: FastifyInstance) =>
           statusCode: 500,
           error: "Internal Server Error",
           message: err instanceof Error ? err.message : "Failed to load calendar",
+        });
+      }
+    },
+  );
+
+  // 6. GET /api/v1/student/attendance
+  app.get(
+    "/attendance",
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const user = request.user as AuthUser;
+      const queryResult = StudentIdQuerySchema.safeParse(request.query);
+      const authCheck = await resolveAndAuthorizeStudent(
+        user,
+        queryResult.success ? queryResult.data.studentId : undefined,
+      );
+      if (!authCheck.authorized) {
+        return reply.status(authCheck.errorStatus ?? 403).send({
+          statusCode: authCheck.errorStatus ?? 403,
+          error: "Forbidden",
+          message: authCheck.errorMessage,
+        });
+      }
+
+      try {
+        const attendance = await getStudentAttendanceSummary(authCheck.studentId);
+        return reply.send(attendance);
+      } catch (err: unknown) {
+        return reply.status(500).send({
+          statusCode: 500,
+          error: "Internal Server Error",
+          message: err instanceof Error ? err.message : "Failed to load attendance",
         });
       }
     },

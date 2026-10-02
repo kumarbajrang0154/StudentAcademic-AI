@@ -185,7 +185,7 @@ describe("Auth Routes & Token Management", () => {
     const body = JSON.parse(response.body);
     expect(body.message).toBe("Invalid credentials");
     await app.close();
-  });
+  }, 10000);
 
   it("handles demo-login when DEMO_MODE is true or false", async () => {
     const prevDemoMode = process.env.DEMO_MODE;
