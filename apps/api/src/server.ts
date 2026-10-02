@@ -13,12 +13,13 @@ import { healthRoutes, HealthRouteOptions } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import {
   studentRoutes,
-  attendanceSimulatorRoutes,
   studentRiskRoutes,
 } from "./routes/student.js";
+import { facultyRoutes } from "./routes/faculty.js";
+import { attendanceRoutes } from "./routes/attendance.js";
+import { marksRoutes } from "./routes/marks.js";
 import {
   authenticate,
-  requireRole,
   PERMISSION_MATRIX,
   AuthUser,
 } from "./lib/rbac.js";
@@ -96,8 +97,16 @@ export async function buildServer(
     prefix: "/api/v1/student",
   });
 
-  await app.register(attendanceSimulatorRoutes, {
+  await app.register(attendanceRoutes, {
     prefix: "/api/v1/attendance",
+  });
+
+  await app.register(marksRoutes, {
+    prefix: "/api/v1/marks",
+  });
+
+  await app.register(facultyRoutes, {
+    prefix: "/api/v1/faculty",
   });
 
   await app.register(studentRiskRoutes, {
@@ -114,20 +123,6 @@ export async function buildServer(
       return reply.send({
         user,
         permissions,
-      });
-    },
-  );
-
-  // Protected route for RBAC testing (FACULTY, HOD, ADMIN only)
-  app.get(
-    "/api/v1/faculty/courses",
-    { preHandler: [requireRole("FACULTY", "HOD", "ADMIN")] },
-    async (request, reply) => {
-      const user = request.user as AuthUser;
-      return reply.send({
-        status: "ok",
-        message: "Faculty access granted",
-        userRole: user.role,
       });
     },
   );

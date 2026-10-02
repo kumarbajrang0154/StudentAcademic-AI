@@ -31,3 +31,18 @@ export {
   type ProtectiveFactor,
   type RiskExplanation,
 } from "./risk.js";
+
+export {
+  parseNumberWords,
+  resolveRollToStudent,
+  disambiguateToAndTwo,
+  parseVoiceAttendance,
+  parseVoiceMarks,
+  type RosterStudent,
+  type AttendanceEntryStatus,
+  type ParsedAttendanceEntry,
+  type VoiceAttendanceResult,
+  type ParsedMarksEntry,
+  type VoiceMarksResult,
+} from "./voice.js";
+
