@@ -628,83 +628,120 @@ async function main() {
     console.log(`✓ Seeded course ${cDef.code} with 4 units, 4 COs, 5 timetable slots, 20 sessions, 4 assessments (5 questions each)`);
   }
 
-  // 9. Recompute and persist CourseEnrollment metrics for all enrollments
+  // 9. Recompute and persist CourseEnrollment metrics — BATCHED for Neon free-tier
+  // Strategy: 3 bulk fetches → in-memory computation → single $transaction with all updates
   console.log('🔄 Recomputing all enrollment metrics (attendance, mastery, velocity, risk)...');
+
+  const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+  // Bulk fetch 1: all enrollments
   const allEnrollments = await prisma.courseEnrollment.findMany({
     select: { studentId: true, courseId: true },
   });
 
-  for (const enr of allEnrollments) {
-    // 1. Attendance Records
-    const attendanceRecords = await prisma.attendanceRecord.findMany({
-      where: {
-        studentId: enr.studentId,
-        session: { courseId: enr.courseId },
-      },
-      select: { status: true },
-    });
+  // Bulk fetch 2: all attendance records (joined to session for courseId)
+  const allSessions = await prisma.classSession.findMany({
+    select: { id: true, courseId: true },
+  });
+  const sessionCourseMap = new Map<string, string>(); // sessionId -> courseId
+  for (const s of allSessions) {
+    sessionCourseMap.set(s.id, s.courseId);
+  }
+  const allAttendance = await prisma.attendanceRecord.findMany({
+    select: { sessionId: true, studentId: true, status: true },
+  });
+  // Map: `${studentId}_${courseId}` -> {present, onDuty, total}
+  type AttSummary = { present: number; onDuty: number; total: number };
+  const attMap = new Map<string, AttSummary>();
+  for (const rec of allAttendance) {
+    const cId = sessionCourseMap.get(rec.sessionId);
+    if (!cId) continue;
+    const key = `${rec.studentId}_${cId}`;
+    const cur = attMap.get(key) ?? { present: 0, onDuty: 0, total: 0 };
+    cur.total++;
+    if (rec.status === AttendanceStatus.PRESENT) cur.present++;
+    else if (rec.status === AttendanceStatus.ON_DUTY || rec.status === AttendanceStatus.MEDICAL_LEAVE) cur.onDuty++;
+    attMap.set(key, cur);
+  }
 
-    const totalSessions = attendanceRecords.length;
-    let presentCount = 0;
-    let onDutyCount = 0;
-    for (const rec of attendanceRecords) {
-      if (rec.status === AttendanceStatus.PRESENT) presentCount++;
-      else if (rec.status === AttendanceStatus.ON_DUTY || rec.status === AttendanceStatus.MEDICAL_LEAVE) onDutyCount++;
-    }
-    const attendanceRate = attendancePercent(presentCount, onDutyCount, totalSessions);
-
-    // 2. Mastery over graded assessments
-    const assessments = await prisma.assessment.findMany({
-      where: { courseId: enr.courseId },
-      include: {
-        scores: { where: { studentId: enr.studentId } },
-      },
-      orderBy: { dueDate: 'asc' },
-    });
-
-    const scoreMap = new Map<string, number>();
-    for (const a of assessments) {
-      if (a.scores.length > 0 && a.scores[0]?.score !== null && a.scores[0]?.score !== undefined) {
-        scoreMap.set(a.id, a.scores[0].score);
+  // Bulk fetch 3: all assessments + student scores in one query
+  const allAssessments = await prisma.assessment.findMany({
+    select: {
+      id: true,
+      courseId: true,
+      maxScore: true,
+      weight: true,
+      dueDate: true,
+      scores: { select: { studentId: true, score: true } },
+    },
+    orderBy: { dueDate: 'asc' },
+  });
+  // Map: courseId -> assessment list (sorted by dueDate asc already)
+  const assessmentsByCourse = new Map<string, typeof allAssessments>();
+  for (const a of allAssessments) {
+    const list = assessmentsByCourse.get(a.courseId) ?? [];
+    list.push(a);
+    assessmentsByCourse.set(a.courseId, list);
+  }
+  // Map: `${assessmentId}_${studentId}` -> score
+  const studentScoreMap = new Map<string, number>();
+  for (const a of allAssessments) {
+    for (const s of a.scores) {
+      if (s.score !== null) {
+        studentScoreMap.set(`${a.id}_${s.studentId}`, s.score);
       }
     }
+  }
 
-    const gradedComponents = assessments
-      .filter((a) => scoreMap.has(a.id))
+  // Compute metrics in-memory, collect all update payloads
+  const updates: Array<{
+    studentId: string;
+    courseId: string;
+    attendanceRate: number;
+    masteryScore: number;
+    velocity: number;
+    submissionDeficit: number;
+    riskScoreVal: number;
+    riskCategory: RiskCategory;
+  }> = [];
+
+  for (const enr of allEnrollments) {
+    // Attendance
+    const attSummary = attMap.get(`${enr.studentId}_${enr.courseId}`) ?? { present: 0, onDuty: 0, total: 0 };
+    const attendanceRate = attendancePercent(attSummary.present, attSummary.onDuty, attSummary.total);
+
+    // Assessments for this course
+    const courseAssessments = assessmentsByCourse.get(enr.courseId) ?? [];
+
+    const gradedComponents = courseAssessments
+      .filter((a) => studentScoreMap.has(`${a.id}_${enr.studentId}`))
       .map((a) => ({
-        score: scoreMap.get(a.id)!,
+        score: studentScoreMap.get(`${a.id}_${enr.studentId}`)!,
         maxScore: a.maxScore,
         weight: a.weight,
       }));
-
     const masteryScore = courseMastery(gradedComponents);
 
-    // 3. Velocity: (M(now) - M(14 days ago)) / 14
-    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-    const componentsFourteenDaysAgo = assessments
-      .filter((a) => a.dueDate && a.dueDate <= fourteenDaysAgo && scoreMap.has(a.id))
+    // Velocity (14-day window)
+    const componentsOld = courseAssessments
+      .filter((a) => a.dueDate && a.dueDate <= fourteenDaysAgo && studentScoreMap.has(`${a.id}_${enr.studentId}`))
       .map((a) => ({
-        score: scoreMap.get(a.id)!,
+        score: studentScoreMap.get(`${a.id}_${enr.studentId}`)!,
         maxScore: a.maxScore,
         weight: a.weight,
       }));
+    const masteryOld = componentsOld.length > 0 ? courseMastery(componentsOld) : 0;
+    const velocity = Math.round(((masteryScore - masteryOld) / 14) * 1000) / 1000;
 
-    const masteryFourteenDaysAgo = componentsFourteenDaysAgo.length > 0
-      ? courseMastery(componentsFourteenDaysAgo)
-      : 0;
-
-    const rawVelocity = (masteryScore - masteryFourteenDaysAgo) / 14;
-    const velocity = Math.round(rawVelocity * 1000) / 1000;
-
-    // 4. Submission Deficit (% of past-due assessments without score)
-    const pastDueAssessments = assessments.filter((a) => a.dueDate && a.dueDate < now);
+    // Submission deficit
+    const pastDue = courseAssessments.filter((a) => a.dueDate && a.dueDate < now);
     let submissionDeficit = 0;
-    if (pastDueAssessments.length > 0) {
-      const missingCount = pastDueAssessments.filter((a) => !scoreMap.has(a.id)).length;
-      submissionDeficit = Math.round((missingCount / pastDueAssessments.length) * 1000) / 10;
+    if (pastDue.length > 0) {
+      const missing = pastDue.filter((a) => !studentScoreMap.has(`${a.id}_${enr.studentId}`)).length;
+      submissionDeficit = Math.round((missing / pastDue.length) * 1000) / 10;
     }
 
-    // 5. Risk score + category
+    // Risk score + override rules
     const rInputs = academicMetricsToRiskInputs(attendanceRate, masteryScore, velocity, 100 - submissionDeficit);
     const rResult = riskScore(rInputs);
     let category = rResult.category;
@@ -716,18 +753,34 @@ async function main() {
       category = RiskCategory.CRITICAL;
     }
 
-    await prisma.courseEnrollment.updateMany({
-      where: { studentId: enr.studentId, courseId: enr.courseId },
-      data: {
-        attendanceRate,
-        masteryScore,
-        velocity,
-        submissionDeficit,
-        riskScore: rResult.score,
-        riskCategory: category,
-      },
+    updates.push({
+      studentId: enr.studentId,
+      courseId: enr.courseId,
+      attendanceRate,
+      masteryScore,
+      velocity,
+      submissionDeficit,
+      riskScoreVal: rResult.score,
+      riskCategory: category,
     });
   }
+
+  // Write all 120 updates in a single transaction (2 round-trips to Neon)
+  await prisma.$transaction(
+    updates.map((u) =>
+      prisma.courseEnrollment.updateMany({
+        where: { studentId: u.studentId, courseId: u.courseId },
+        data: {
+          attendanceRate: u.attendanceRate,
+          masteryScore: u.masteryScore,
+          velocity: u.velocity,
+          submissionDeficit: u.submissionDeficit,
+          riskScore: u.riskScoreVal,
+          riskCategory: u.riskCategory,
+        },
+      }),
+    ),
+  );
   console.log(`✓ Successfully updated metrics for all ${allEnrollments.length} course enrollments`);
 
   // 10. Intervention for student01
