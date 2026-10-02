@@ -1,129 +1,112 @@
-# Deployment Guide: Vercel (Web) + Render (API) + Neon (Postgres)
+# Deployment Guide: Vercel (Unified Single Deployment) + Neon (Postgres)
 
-This guide documents the exact configuration and environment variables required to deploy **Student Academic AI** to production on **Vercel** and **Render** with **Neon Cloud PostgreSQL**.
+This guide documents the architecture, configuration, and environment variables required to deploy **Student Academic AI** to production on **Vercel** with **Neon Cloud PostgreSQL**.
 
 ---
 
 ## Architecture Overview
 
 ```
-                                         ┌───────────────────────────┐
-                                         │  Next.js 15 Web (Vercel)  │
-                                         │  apps/web                 │
-                                         └─────────────┬─────────────┘
+                                          ┌──────────────────────────────────────────────┐
+                                          │      Vercel Serverless (apps/web)            │
+                                          │                                              │
+                                          │  ┌────────────────────┐                      │
+                                          │  │ React / Next.js 15 │ (Browser UI)         │
+                                          │  └─────────┬──────────┘                      │
+                                          │            │ same-origin /api/v1/*           │
+                                          │            ▼                                 │
+                                          │  ┌────────────────────┐                      │
+                                          │  │ Catch-All Route    │ (/api/[...path])     │
+                                          │  │ (app.inject())     │                      │
+                                          │  └─────────┬──────────┘                      │
+                                          │            │ in-memory fast dispatch         │
+                                          │            ▼                                 │
+                                          │  ┌────────────────────┐                      │
+                                          │  │ Fastify Instance   │ (Cached on global)   │
+                                          │  │ (Full RBAC + Core) │                      │
+                                          │  └─────────┬──────────┘                      │
+                                          └────────────┼─────────────────────────────────┘
                                                        │
-                                  Next.js Rewrite (/api/:path* -> Render)
-                                  First-party HttpOnly cookies preserved
+                                        Prisma Pooled Connection (TLS)
                                                        │
                                                        ▼
-                                         ┌───────────────────────────┐
-                                         │ Fastify Node API (Render) │
-                                         │ apps/api (Port 4000)      │
-                                         └─────────────┬─────────────┘
-                                                       │
-                                      Prisma Pooler / Direct Connections
-                                                       │
-                                                       ▼
-                                         ┌───────────────────────────┐
-                                         │   PostgreSQL 16 (Neon)    │
-                                         │   Serverless Postgres     │
-                                         └───────────────────────────┘
+                                          ┌───────────────────────────┐
+                                          │   PostgreSQL 16 (Neon)    │
+                                          │   Serverless Postgres     │
+                                          └───────────────────────────┘
 ```
 
+The entire system runs as a **single unified deployment on Vercel**:
+- The Next.js App Router catches all API requests via [`src/app/api/[...path]/route.ts`](file:///c:/Users/rajan/OneDrive/Desktop/StudentAcademic-AI/apps/web/src/app/api/[...path]/route.ts) and forwards them directly to the compiled Fastify instance using `app.inject()` (in-process, zero network hop, zero external proxy).
+- Authentication cookies (`refreshToken`) are first-party and same-origin (`HttpOnly`, `SameSite=Lax`, `Secure` in production, `Path=/`).
+- No separate backend server or hosting provider is needed.
+
 ---
 
-## 1. Vercel Configuration (`apps/web`)
+## 1. Vercel Project Settings
 
-Configure the Vercel project settings:
-- **Root Directory**: `apps/web` (or monorepo root `.` with "Include files outside root directory" enabled)
+Configure the project settings in the Vercel Dashboard:
+
+- **Root Directory**: `apps/web`
+- **Include source files outside of the Root Directory**: **Enabled** (Required so workspace packages `@student-academic-ai/core`, `@student-academic-ai/database`, `@student-academic-ai/types`, and `@student-academic-ai/api` are accessible during build).
 - **Framework Preset**: `Next.js`
 - **Node.js Version**: `20.x` or `22.x`
-- **Install Command**: `npm install` (executed at the monorepo root to link workspace packages)
-- **Build Command**: `npm run build -w @student-academic-ai/web` (invokes Turbo to build required packages `@student-academic-ai/core`, `@student-academic-ai/types` first, then compiles the Next.js bundle)
-- **Output Directory**: `.next` (or `apps/web/.next` if root directory is `.`)
+- **Install Command**: `npm install` (executed from the monorepo root)
+- **Build Command**: `npm run build -w @student-academic-ai/web` (invokes Turbo to compile workspace dependencies and generate Prisma client before building Next.js)
+- **Output Directory**: `.next`
+
+---
+
+## 2. Vercel Environment Variables
+
+Set the following variables in **Vercel Project Settings $\rightarrow$ Environment Variables** (for Production, Preview, and Development):
+
+| Variable Name | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | **Yes** | Neon connection-pooled URL (`sslmode=require&pgbouncer=true&connect_timeout=15`). |
+| `DIRECT_URL` | **Yes** | Neon unpooled direct URL (`sslmode=require&connect_timeout=15`) for Prisma migrations and schema operations. |
+| `JWT_SECRET` | **Yes** | 32+ character random secret used for Fastify JWT token generation and verification. |
+| `DEMO_MODE` | **Yes** | Set to `true` to enable quick demo role logins on `/login`. |
+| `FAIL_PROVIDER` | No | Optional failure injection flag (`none` by default). |
+| `NODE_ENV` | Auto | Automatically managed by Vercel (`production` during live deployments). |
 
 > [!NOTE]
-> All proxy rewrites (`/api/:path*` -> `${API_URL}/api/:path*`) are handled strictly inside [apps/web/next.config.ts](file:///c:/Users/rajan/OneDrive/Desktop/StudentAcademic-AI/apps/web/next.config.ts). A root `vercel.json` is intentionally **not** used to eliminate any conflicting rewrites or hardcoded destinations.
-
-### Vercel Environment Variables
-
-| Variable Name | Required | Example / Format | Purpose |
-|---|---|---|---|
-| `API_URL` | **Yes** | `https://student-academic-ai-api.onrender.com` | Target URL for the Next.js `/api/:path*` rewrite proxy. **Must be a public https URL without trailing slash**. Set ONLY via Vercel dashboard environment variables. Never commit `.env.production`. |
-| `NEXT_PUBLIC_API_URL` | No | `https://student-academic-ai-api.onrender.com` | Client-side fallback if any direct client requests are made. |
-| `NEXT_PUBLIC_ML_URL` | No | `http://localhost:8000` | Optional predictive ML service URL. |
-
-> [!IMPORTANT]
-> - `apps/web/next.config.ts` validates `API_URL` during production builds. If `API_URL` is missing or points to `localhost`/`127.0.0.1`/private IP, the build will immediately fail with `"API_URL must be a public https URL"`. This prevents deploying builds that trigger Vercel's `404 DNS_HOSTNAME_RESOLVED_PRIVATE` error.
-> - When `API_URL` is set to your public Render URL, Vercel proxies all `/api/*` requests directly to Render. Browsers maintain first-party HttpOnly session cookies without cross-site cookie restrictions.
+> All credentials must remain confidential. Never print or commit real connection strings or secrets to source control.
 
 ---
 
-## 2. Render Configuration (`apps/api`)
+## 3. Database Initialization & Seed
 
-Deploy the Fastify API server as a Web Service on Render:
-- **Root Directory**: `.` (monorepo root)
-- **Environment**: `Node`
-- **Build Command**: `npm install && npm run build`
-- **Start Command**: `npm run start -w @student-academic-ai/api`
-- **Health Check Path**: `/health`
+Run database migrations and seed from your local development environment once before launch:
 
-### Render Environment Variables
-
-| Variable Name | Required | Example / Description |
-|---|---|---|
-| `DATABASE_URL` | **Yes** | `postgresql://user:****@ep-xyz-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connect_timeout=15` (Neon connection-pooled URL). Masked as `****`. |
-| `DIRECT_URL` | **Yes** | `postgresql://user:****@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require&connect_timeout=15` (Neon unpooled direct URL for Prisma migrations). Masked as `****`. |
-| `JWT_SECRET` | **Yes** | `****` (Random 32+ character secret for Fastify JWT signing). |
-| `DEMO_MODE` | **Yes** | `true` (Enables quick demo role logins for `STUDENT`, `FACULTY`, `MENTOR`, `HOD`, `ADMIN` at `/api/v1/auth/demo-login`). |
-| `WEB_ORIGIN` | **Yes** | `https://student-academic-ai.vercel.app` (The Vercel domain; allows credentials and CORS headers). |
-| `NODE_ENV` | **Yes** | `production` |
-| `FAIL_PROVIDER` | No | `none` (Optional failure injection provider flag). |
-| `REDIS_URL` | No | Optional Redis connection string. If unset, Redis probe is marked `disabled` and does not block `/health`. |
-
----
-
-## 3. Cold Starts & Infrastructure Notes
-
-### Render Free Tier Sleep
-- Free instances on Render spin down after 15 minutes of inactivity.
-- The first incoming request triggers a cold start, which may take **30 to 60 seconds**.
-- **Hardened Web Client**: The frontend auth client in `apps/web/src/lib/auth.tsx` does not blindly parse responses as JSON. If Render is still waking up and returns a 502/503 HTML page, the client catches it and gracefully alerts:
-  > *"Cannot reach the server. Please try again in a moment."*
-
-### Neon Serverless Postgres Sleep
-- Inactive Neon compute endpoints suspend automatically to save resources.
-- Connection strings include `connect_timeout=15` and retry tolerance so that cold starts do not drop incoming queries.
+```bash
+npm run db:migrate
+npm run db:seed
+npm run db:verify
+```
 
 ---
 
 ## 4. Verification Checklist
 
-1. **Database Migrations & Seed**:
-   Run against Neon once before launch:
+1. **Verify Unified API Health**:
    ```bash
-   npm run db:migrate
-   npm run db:seed
-   npm run db:verify
-   ```
-
-2. **Verify API Health on Render**:
-   ```bash
-   curl -i https://<your-render-url>/health
+   curl -i https://<your-vercel-domain>/api/health
    # Expected: 200 {"status":"ok","db":"up","redis":"disabled"}
    ```
 
-3. **Verify Vercel Rewrites**:
+2. **Verify Demo Status**:
    ```bash
-   curl -i https://<your-vercel-url>/api/v1/auth/me
-   # Expected: 401 {"statusCode":401,"error":"Unauthorized","message":"Authorization header missing"}
+   curl -i https://<your-vercel-domain>/api/v1/auth/demo-status
+   # Expected: 200 {"demoMode":true}
    ```
 
-4. **Demo Authentication on Vercel**:
-   - Open `https://<your-vercel-url>/login`.
+3. **Verify Demo Authentication on Vercel**:
+   - Navigate to `https://<your-vercel-domain>/login`.
    - Click **Student Demo** $\rightarrow$ verifies student dashboard redirection.
    - Click **Faculty Demo**, **Mentor Demo**, **HOD Demo**, **Admin Demo**.
-   - Test manual login with `student01@demo.edu` / `Demo@1234`.
+   - Test manual login with seeded credentials.
+   - Test logout $\rightarrow$ clears session and redirects to `/login`.
 
 ---
 
@@ -131,9 +114,7 @@ Deploy the Fastify API server as a Web Service on Render:
 
 | Error / Symptom | Likely Cause | Exact Resolution / Fix |
 |---|---|---|
-| **Vercel 404 `DNS_HOSTNAME_RESOLVED_PRIVATE`** | The Next.js rewrite target (`API_URL`) resolved to a private/loopback IP address (`localhost`, `127.0.0.1`, `0.0.0.0`, or RFC1918 private range). Occurs when `API_URL` was unset or defaulted to localhost during the Vercel production build. | 1. Go to **Vercel Dashboard $\rightarrow$ Project Settings $\rightarrow$ Environment Variables**.<br>2. Set `API_URL` to your public Render service URL: `https://<your-api>.onrender.com` (no trailing slash).<br>3. Trigger a fresh deployment (`Redeploy`). The build guard in `next.config.ts` prevents future builds from succeeding if `API_URL` is private or unset. |
-| **`DNS_HOSTNAME_NOT_FOUND`** | `API_URL` in Vercel environment variables contains a typo, a deleted service domain, or a non-existent subdomain. | 1. Open the Render dashboard and copy the exact Web Service URL.<br>2. Update `API_URL` in Vercel Project Settings.<br>3. Redeploy the Vercel web project.<br>4. Test hostname resolution directly: `curl -i https://<your-api>.onrender.com/health`. |
-| **`502 Bad Gateway` / `503 Service Unavailable`** | 1. Render free instance is cold sleeping (first request takes 30–60s to wake up).<br>2. The Fastify API process crashed on boot (e.g. database connection failed or missing `DATABASE_URL`). | 1. Allow up to 60 seconds for Render compute to start. The UI displays: *"Server is waking up (can take up to 60s). Please retry."*<br>2. Check Render service logs for runtime exceptions or failed DB migrations.<br>3. Ensure `DATABASE_URL` and `DIRECT_URL` are valid Neon PostgreSQL strings. |
-| **`CORS error` (Cross-Origin Request Blocked)** | Direct client-side fetch bypassed the Next.js rewrite proxy, or Render's `WEB_ORIGIN` does not match the Vercel domain. | 1. In Render Web Service Environment, set `WEB_ORIGIN` to your exact Vercel frontend URL: `https://<your-app>.vercel.app` (no trailing slash).<br>2. Ensure all frontend API calls use relative paths (e.g. `/api/v1/auth/login`) so they are routed through Next.js rewrites on the same origin. |
-| **`403 Demo login is disabled`** | The backend received a demo login request at `/api/v1/auth/demo-login` but `DEMO_MODE` on Render is not set to `"true"`. | 1. In Render Dashboard $\rightarrow$ Environment, set `DEMO_MODE=true`.<br>2. Wait for the service to redeploy.<br>3. The login page automatically queries `/api/v1/auth/demo-status` and displays the quick demo role buttons only when demo mode is active. |
-
+| **Database connection timeout / error** | `DATABASE_URL` or `DIRECT_URL` environment variables are incorrect or Neon compute is suspended. | 1. Verify `DATABASE_URL` and `DIRECT_URL` in Vercel Environment Variables.<br>2. Confirm connection string contains `connect_timeout=15&sslmode=require`.<br>3. Check Neon console to ensure compute endpoint is active. |
+| **Prisma Client engine not found on Vercel** | Missing query engine binary targets for AWS Lambda/Vercel runtime environment. | 1. Ensure `packages/database/prisma/schema.prisma` specifies `binaryTargets = ["native", "rhel-openssl-3.0.x"]`.<br>2. Ensure `apps/web/next.config.ts` includes `serverExternalPackages: ["@prisma/client", "prisma"]`. |
+| **`403 Demo login is disabled`** | `DEMO_MODE` environment variable on Vercel is unset, `false`, or not equal to `"true"`. | Set `DEMO_MODE=true` in Vercel Project Settings $\rightarrow$ Environment Variables, and trigger a redeployment. |
+| **`500 Internal Server Error` on API routes** | Database connection failure or unhandled exception in Fastify route handler. | Check Vercel Function logs under the **Logs** tab. Fastify inject errors will display route execution details without leaking secrets. |

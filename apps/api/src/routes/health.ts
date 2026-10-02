@@ -54,7 +54,7 @@ export const healthRoutes: FastifyPluginAsync<HealthRouteOptions> = async (
   fastify,
   opts,
 ) => {
-  fastify.get("/health", async (_request, reply) => {
+  const handleHealth = async (_request: unknown, reply: { status: (code: number) => { send: (body: unknown) => unknown } }) => {
     let dbStatus: "up" | "down" = "down";
     let redisStatus: "up" | "down" | "disabled" = "disabled";
 
@@ -101,5 +101,8 @@ export const healthRoutes: FastifyPluginAsync<HealthRouteOptions> = async (
       db: dbStatus,
       redis: redisStatus,
     });
-  });
+  };
+
+  fastify.get("/health", handleHealth);
+  fastify.get("/api/health", handleHealth);
 };

@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",
+    "@student-academic-ai/api": "*",
     "@student-academic-ai/core": "*",
+    "@student-academic-ai/database": "*",
     "@student-academic-ai/types": "*",
     "@tanstack/react-query": "^5.104.0",
     "clsx": "^2.1.1",

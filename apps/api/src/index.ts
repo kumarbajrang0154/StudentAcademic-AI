@@ -1,18 +1,34 @@
 import "dotenv/config";
-import { buildServer } from "./server.js";
+import { buildServer, buildApp, BuildServerOptions } from "./server.js";
 
-const PORT = Number(process.env.PORT) || 4000;
+export { buildServer, buildApp, BuildServerOptions };
+
+const PORT = Number(process.env.PORT) || Number(process.env.API_PORT) || 4000;
 const HOST = process.env.HOST || "0.0.0.0";
 
-async function start() {
+export async function start() {
   try {
     const server = await buildServer();
     await server.listen({ port: PORT, host: HOST });
     console.log(`🚀 Fastify API server running at http://${HOST}:${PORT}`);
+    return server;
   } catch (err) {
     console.error("Error starting API server:", err);
     process.exit(1);
   }
 }
 
-start();
+// Start standalone server only when run directly as the entry script
+const arg1 = process.argv[1];
+const isDirectRun =
+  typeof arg1 === "string" &&
+  (arg1.endsWith("index.ts") ||
+    arg1.endsWith("index.js") ||
+    arg1.includes("apps/api") ||
+    arg1.includes("apps\\api"));
+
+if (isDirectRun) {
+  start();
+}
+
+

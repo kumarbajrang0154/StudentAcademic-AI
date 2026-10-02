@@ -1,4 +1,10 @@
+import dotenv from "dotenv";
+import path from "node:path";
 import Fastify, { FastifyInstance } from "fastify";
+
+dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), "../../.env") });
+dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import jwt from "@fastify/jwt";
@@ -122,6 +128,20 @@ export async function buildServer(
     },
   );
 
+  // Parent route /p/v endpoint
+  app.all("/p/v", async () => {
+    return {
+      status: "ok",
+      service: "parent-portal",
+    };
+  });
+  app.all("/p/v/*", async () => {
+    return {
+      status: "ok",
+      service: "parent-portal",
+    };
+  });
+
   // Root welcome endpoint
   app.get("/", async () => {
     return {
@@ -133,3 +153,6 @@ export async function buildServer(
 
   return app;
 }
+
+export const buildApp = buildServer;
+
