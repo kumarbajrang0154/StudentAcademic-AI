@@ -36,8 +36,8 @@ async function parseJsonResponse<T>(
   let text = "";
   try {
     text = await res.text();
-  } catch (readErr) {
-    console.error(`Failed to read response from ${url}:`, readErr);
+  } catch {
+    console.error(`HTTP ${res.status} from ${url}`);
     return {
       data: null,
       error: "Cannot reach the server. Please try again in a moment.",
@@ -48,7 +48,7 @@ async function parseJsonResponse<T>(
   try {
     json = JSON.parse(text) as T;
   } catch {
-    console.error(`Non-JSON response (HTTP ${res.status}) from ${url}`);
+    console.error(`HTTP ${res.status} from ${url}`);
     return {
       data: null,
       error: "Cannot reach the server. Please try again in a moment.",
@@ -56,9 +56,10 @@ async function parseJsonResponse<T>(
   }
 
   if (!res.ok) {
+    console.error(`HTTP ${res.status} from ${url}`);
     const errorMsg =
       (json as { message?: string })?.message ||
-      `Request failed with status ${res.status}`;
+      "Cannot reach the server. Please try again in a moment.";
     return { data: null, error: errorMsg };
   }
 

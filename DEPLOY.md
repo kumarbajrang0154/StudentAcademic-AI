@@ -34,21 +34,25 @@ This guide documents the exact configuration and environment variables required 
 
 ## 1. Vercel Configuration (`apps/web`)
 
-Deploy the Next.js web application on Vercel:
-- **Root Directory**: `apps/web` (or workspace root with build command `npx turbo run build --filter=@student-academic-ai/web`)
+Configure the Vercel project settings (or use root [`vercel.json`](file:///c:/Users/rajan/OneDrive/Desktop/StudentAcademic-AI/vercel.json)):
+- **Root Directory**: `apps/web` (or root with monorepo build)
 - **Framework Preset**: `Next.js`
 - **Node.js Version**: `20.x` or `22.x`
+- **Install Command**: `npm install` (executed at the monorepo root to link workspace packages)
+- **Build Command**: `npm run build -w @student-academic-ai/web` (invokes Turbo to build required packages `@student-academic-ai/core`, `@student-academic-ai/types` first, then compiles the Next.js bundle)
+- **Output Directory**: `.next`
 
 ### Vercel Environment Variables
 
 | Variable Name | Required | Example / Format | Purpose |
 |---|---|---|---|
-| `API_URL` | **Yes** | `https://student-academic-ai-api.onrender.com` | Target URL for the Next.js `/api/:path*` rewrite proxy. **Do not include trailing slash**. |
+| `API_URL` | **Yes** | `https://student-academic-ai-api.onrender.com` | Target URL for the Next.js `/api/:path*` rewrite proxy. **Must be a public https URL without trailing slash**. |
 | `NEXT_PUBLIC_API_URL` | No | `https://student-academic-ai-api.onrender.com` | Client-side fallback if any direct client requests are made. |
 | `NEXT_PUBLIC_ML_URL` | No | `http://localhost:8000` | Optional predictive ML service URL. |
 
 > [!IMPORTANT]
-> When `API_URL` is set in Vercel project settings, `apps/web/next.config.ts` dynamically forwards all `/api/*` traffic directly to Render. This eliminates CORS complications in the browser and ensures HttpOnly refresh cookies are sent first-party.
+> - `apps/web/next.config.ts` validates `API_URL` during production builds. If `API_URL` is missing or accidentally set to `localhost`/`127.0.0.1`/private IP, the build will immediately fail with `"API_URL must be a public https URL"`. This prevents deploying builds that trigger Vercel's `404 DNS_HOSTNAME_RESOLVED_PRIVATE` error.
+> - When `API_URL` is set to your public Render URL, Vercel proxies all `/api/*` requests directly to Render. Browsers maintain first-party HttpOnly session cookies without cross-site cookie restrictions.
 
 ---
 
