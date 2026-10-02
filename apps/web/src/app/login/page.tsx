@@ -47,11 +47,15 @@ export default function LoginPage() {
     setIsSubmitting(false);
 
     if (res.success) {
-      // Determine redirection based on email prefix or redirect to role dashboard
-      if (email.startsWith("student")) router.push("/student/dashboard");
-      else if (email.startsWith("faculty") || email.startsWith("mentor"))
+      if (res.user) {
+        router.push(routeByRole(res.user.role));
+      } else if (email.startsWith("student")) {
+        router.push("/student/dashboard");
+      } else if (email.startsWith("faculty") || email.startsWith("mentor")) {
         router.push("/faculty/dashboard");
-      else router.push("/admin/dashboard");
+      } else {
+        router.push("/admin/dashboard");
+      }
     } else {
       setError(res.error || "Invalid email or password");
     }
@@ -140,27 +144,24 @@ export default function LoginPage() {
         </form>
 
         {demoMode && (
-          <>
-            <div className="relative my-8 text-center">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-700"></div>
-              </div>
-              <span className="relative px-3 bg-slate-800 text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Or quick demo login
+          <div className="mt-8 pt-6 border-t border-slate-700/80 space-y-4">
+            <div className="text-center">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                Quick Demo Login
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => handleDemoClick("STUDENT")}
                 disabled={Boolean(loadingRole)}
-                className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-indigo-400 group disabled:opacity-50"
+                className="flex items-center justify-center gap-2 p-2.5 bg-slate-700/40 hover:bg-slate-700/80 border border-slate-600/60 rounded-xl text-xs font-medium text-slate-200 transition hover:border-indigo-400 group disabled:opacity-50"
               >
                 {loadingRole === "STUDENT" ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
                 ) : (
-                  <GraduationCap className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition" />
+                  <GraduationCap className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition" />
                 )}
                 <span>Student Demo</span>
               </button>
@@ -169,12 +170,12 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => handleDemoClick("FACULTY")}
                 disabled={Boolean(loadingRole)}
-                className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-cyan-400 group disabled:opacity-50"
+                className="flex items-center justify-center gap-2 p-2.5 bg-slate-700/40 hover:bg-slate-700/80 border border-slate-600/60 rounded-xl text-xs font-medium text-slate-200 transition hover:border-cyan-400 group disabled:opacity-50"
               >
                 {loadingRole === "FACULTY" ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
                 ) : (
-                  <BookOpen className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition" />
+                  <BookOpen className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition" />
                 )}
                 <span>Faculty Demo</span>
               </button>
@@ -183,12 +184,12 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => handleDemoClick("MENTOR")}
                 disabled={Boolean(loadingRole)}
-                className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-teal-400 group disabled:opacity-50"
+                className="flex items-center justify-center gap-2 p-2.5 bg-slate-700/40 hover:bg-slate-700/80 border border-slate-600/60 rounded-xl text-xs font-medium text-slate-200 transition hover:border-teal-400 group disabled:opacity-50"
               >
                 {loadingRole === "MENTOR" ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-400" />
                 ) : (
-                  <UserCheck className="w-4 h-4 text-teal-400 group-hover:scale-110 transition" />
+                  <UserCheck className="w-3.5 h-3.5 text-teal-400 group-hover:scale-110 transition" />
                 )}
                 <span>Mentor Demo</span>
               </button>
@@ -197,12 +198,12 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => handleDemoClick("HOD")}
                 disabled={Boolean(loadingRole)}
-                className="flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-amber-400 group disabled:opacity-50"
+                className="flex items-center justify-center gap-2 p-2.5 bg-slate-700/40 hover:bg-slate-700/80 border border-slate-600/60 rounded-xl text-xs font-medium text-slate-200 transition hover:border-amber-400 group disabled:opacity-50"
               >
                 {loadingRole === "HOD" ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
                 ) : (
-                  <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition" />
                 )}
                 <span>HOD Demo</span>
               </button>
@@ -211,17 +212,47 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => handleDemoClick("ADMIN")}
                 disabled={Boolean(loadingRole)}
-                className="col-span-2 flex items-center justify-center gap-2 p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-medium text-slate-200 transition hover:border-emerald-400 group disabled:opacity-50"
+                className="col-span-2 flex items-center justify-center gap-2 p-2.5 bg-slate-700/40 hover:bg-slate-700/80 border border-slate-600/60 rounded-xl text-xs font-medium text-slate-200 transition hover:border-emerald-400 group disabled:opacity-50"
               >
                 {loadingRole === "ADMIN" ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
                 ) : (
-                  <ShieldAlert className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition" />
+                  <ShieldAlert className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition" />
                 )}
                 <span>Admin Demo</span>
               </button>
             </div>
-          </>
+
+            {/* Seeded Demo Accounts Info Box */}
+            <div className="p-3.5 bg-slate-900/80 border border-slate-700/80 rounded-xl text-xs space-y-2">
+              <div className="flex items-center justify-between text-slate-400 border-b border-slate-800 pb-1.5 font-medium">
+                <span>Demo Accounts</span>
+                <span className="font-mono text-[11px] text-indigo-400">Password: Demo@1234</span>
+              </div>
+              <div className="space-y-1 font-mono text-[11px]">
+                {[
+                  { role: "Student", email: "student01@demo.edu" },
+                  { role: "Faculty", email: "faculty1@demo.edu" },
+                  { role: "Mentor", email: "mentor1@demo.edu" },
+                  { role: "HOD", email: "hod@demo.edu" },
+                  { role: "Admin", email: "admin@demo.edu" },
+                ].map((acc) => (
+                  <div
+                    key={acc.email}
+                    onClick={() => {
+                      setEmail(acc.email);
+                      setPassword("Demo@1234");
+                    }}
+                    className="flex items-center justify-between text-slate-300 hover:text-white hover:bg-slate-800/60 px-1.5 py-0.5 rounded cursor-pointer transition group"
+                    title={`Click to fill ${acc.email}`}
+                  >
+                    <span className="text-slate-400 group-hover:text-indigo-300">{acc.role}:</span>
+                    <span className="text-slate-200">{acc.email}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

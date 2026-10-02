@@ -15,19 +15,37 @@ const DemoLoginSchema = z.object({
 });
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
-  // GET /demo-status
+  // GET /config (no auth)
+  app.get("/config", async () => {
+    return { demoMode: process.env.DEMO_MODE === "true" };
+  });
+
+  // GET /demo-status (legacy alias)
   app.get("/demo-status", async () => {
     return { demoMode: process.env.DEMO_MODE === "true" };
   });
 
-  // Rate-limiting: 10 requests per minute on login endpoint
+  // Rate-limiting: 10 attempts per 15 minutes per IP+email on login endpoint
   app.post(
     "/login",
     {
       config: {
         rateLimit: {
           max: 10,
-          timeWindow: "1 minute",
+          timeWindow: "15 minutes",
+          hook: "preValidation",
+          keyGenerator: (request) => {
+            const body = request.body as { email?: string } | undefined;
+            const email = body?.email ? body.email.toLowerCase().trim() : "";
+            const ip = request.ip || "127.0.0.1";
+            return `${ip}:${email}`;
+          },
+          errorResponseBuilder: (_request, context) => ({
+            statusCode: 429,
+            error: "Too Many Requests",
+            message: "Too many login attempts. Please wait 15 minutes before retrying.",
+            retryAfter: context.after,
+          }),
         },
       },
     },
@@ -121,10 +139,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   // Demo login
   app.post("/demo-login", async (request, reply) => {
     if (process.env.DEMO_MODE !== "true") {
-      return reply.status(403).send({
-        statusCode: 403,
-        error: "Forbidden",
-        message: "Demo login is only available when DEMO_MODE=true",
+      return reply.status(404).send({
+        statusCode: 404,
+        error: "Not Found",
+        message: "Demo login is disabled",
       });
     }
 

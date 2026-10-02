@@ -18,7 +18,7 @@ interface AuthContextType {
   login: (
     email: string,
     password: string,
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<{ success: boolean; user?: User; error?: string }>;
   demoLogin: (
     role: "STUDENT" | "FACULTY" | "MENTOR" | "HOD" | "ADMIN",
   ) => Promise<{ success: boolean; user?: User; error?: string }>;
@@ -38,7 +38,14 @@ function getErrorMessage(status: number, serverMsg?: string): string {
     return "Demo login is disabled.";
   }
   if (status === 404) {
-    return "API route not found. Check API_URL configuration.";
+    if (serverMsg === "Demo login is disabled") return serverMsg;
+    return serverMsg || "API route not found. Check API_URL configuration.";
+  }
+  if (status === 429) {
+    return (
+      serverMsg ||
+      "Too many login attempts. Please wait 15 minutes before retrying."
+    );
   }
   if (status === 502 || status === 503 || status === 504 || status >= 500) {
     return "Server is waking up (can take up to 60s). Please retry.";
@@ -95,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
     async function checkDemoStatus() {
       try {
-        const url = "/api/v1/auth/demo-status";
+        const url = "/api/v1/auth/config";
         const res = await fetch(url);
         if (!res.ok) {
           console.error(`HTTP ${res.status} ${url}`);
@@ -107,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setDemoMode(data.demoMode);
         }
       } catch {
-        console.error("Network error /api/v1/auth/demo-status");
+        console.error("Network error /api/v1/auth/config");
       }
     }
     checkDemoStatus();
@@ -197,7 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (parsed.data.user) {
         setUser(parsed.data.user);
       }
-      return { success: true };
+      return { success: true, user: parsed.data.user };
     } catch {
       console.error("Network error /api/v1/auth/login");
       return {

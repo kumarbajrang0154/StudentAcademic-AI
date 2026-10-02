@@ -189,46 +189,92 @@ describe("Auth Routes & Token Management", () => {
 
   it("handles demo-login when DEMO_MODE is true or false", async () => {
     const prevDemoMode = process.env.DEMO_MODE;
-    process.env.DEMO_MODE = "false";
 
-    const app = await buildServer({ db: dummyDb, redis: "disabled" });
-    const response = await app.inject({
+    // Case 1: DEMO_MODE !== "true" -> 404 Not Found
+    process.env.DEMO_MODE = "false";
+    const appFalse = await buildServer({ db: dummyDb, redis: "disabled" });
+    const resFalse = await appFalse.inject({
       method: "POST",
       url: "/api/v1/auth/demo-login",
       payload: { role: "STUDENT" },
     });
+    expect(resFalse.statusCode).toBe(404);
+    const bodyFalse = JSON.parse(resFalse.body);
+    expect(bodyFalse.message).toBe("Demo login is disabled");
+    await appFalse.close();
 
-    expect(response.statusCode).toBe(403);
+    // Case 2: DEMO_MODE === "true" -> 200 OK
+    process.env.DEMO_MODE = "true";
+    const appTrue = await buildServer({ db: dummyDb, redis: "disabled" });
+    const resTrue = await appTrue.inject({
+      method: "POST",
+      url: "/api/v1/auth/demo-login",
+      payload: { role: "STUDENT" },
+    });
+    expect(resTrue.statusCode).toBe(200);
+    const bodyTrue = JSON.parse(resTrue.body);
+    expect(bodyTrue.accessToken).toBeDefined();
+    expect(bodyTrue.user.role).toBe("STUDENT");
+    await appTrue.close();
 
     process.env.DEMO_MODE = prevDemoMode;
-    await app.close();
   });
 
-  it("returns demoMode boolean on GET /api/v1/auth/demo-status", async () => {
+  it("returns demoMode boolean on GET /api/v1/auth/config and /demo-status", async () => {
     const prevDemoMode = process.env.DEMO_MODE;
     process.env.DEMO_MODE = "true";
 
     const app = await buildServer({ db: dummyDb, redis: "disabled" });
-    const response = await app.inject({
+    const responseConfig = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/config",
+    });
+    expect(responseConfig.statusCode).toBe(200);
+    expect(JSON.parse(responseConfig.body)).toEqual({ demoMode: true });
+
+    const responseStatus = await app.inject({
       method: "GET",
       url: "/api/v1/auth/demo-status",
     });
-
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body).toEqual({ demoMode: true });
+    expect(responseStatus.statusCode).toBe(200);
+    expect(JSON.parse(responseStatus.body)).toEqual({ demoMode: true });
 
     process.env.DEMO_MODE = "false";
-    const resFalse = await app.inject({
+    const resConfigFalse = await app.inject({
       method: "GET",
-      url: "/api/v1/auth/demo-status",
+      url: "/api/v1/auth/config",
     });
-    expect(resFalse.statusCode).toBe(200);
-    expect(JSON.parse(resFalse.body)).toEqual({ demoMode: false });
+    expect(resConfigFalse.statusCode).toBe(200);
+    expect(JSON.parse(resConfigFalse.body)).toEqual({ demoMode: false });
 
     process.env.DEMO_MODE = prevDemoMode;
     await app.close();
   });
+
+  it("enforces rate limit of 10 attempts on /login returning 429", async () => {
+    const app = await buildServer({ db: dummyDb, redis: "disabled" });
+
+    // Send 12 concurrent login attempts with same IP and email
+    const responses = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        app.inject({
+          method: "POST",
+          url: "/api/v1/auth/login",
+          payload: {
+            email: "ratelimit.test@demo.edu",
+            password: "wrong-password",
+          },
+        }),
+      ),
+    );
+
+    const rateLimited = responses.filter((r) => r.statusCode === 429);
+    expect(rateLimited.length).toBeGreaterThan(0);
+    const parsed = JSON.parse(rateLimited[0]!.body);
+    expect(parsed.message).toContain("Too many login attempts");
+
+    await app.close();
+  }, 20000);
 
   it("enforces role guards on protected faculty route", async () => {
     const app = await buildServer({ db: dummyDb, redis: "disabled" });

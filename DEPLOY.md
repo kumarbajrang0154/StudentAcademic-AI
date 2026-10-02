@@ -65,13 +65,14 @@ Set the following variables in **Vercel Project Settings $\rightarrow$ Environme
 |---|---|---|
 | `DATABASE_URL` | **Yes** | Neon connection-pooled URL (`sslmode=require&pgbouncer=true&connect_timeout=15`). |
 | `DIRECT_URL` | **Yes** | Neon unpooled direct URL (`sslmode=require&connect_timeout=15`) for Prisma migrations and schema operations. |
-| `JWT_SECRET` | **Yes** | 32+ character random secret used for Fastify JWT token generation and verification. |
-| `DEMO_MODE` | **Yes** | Set to `true` to enable quick demo role logins on `/login`. |
+| `JWT_SECRET` | **Yes** | Cryptographically secure 32+ character random secret used for Fastify JWT token generation and verification. Always generate a fresh secret for production (`openssl rand -hex 32`) and rotate periodically. |
+| `DEMO_MODE` | **Yes** | Set to `"true"` to enable quick demo role logins on `/login`. **For any non-demo or production deployment, set `DEMO_MODE=false`** (this removes demo buttons and demo credentials from the UI, and returns `404 Not Found` for any direct `POST /api/v1/auth/demo-login` requests). |
 | `FAIL_PROVIDER` | No | Optional failure injection flag (`none` by default). |
 | `NODE_ENV` | Auto | Automatically managed by Vercel (`production` during live deployments). |
 
 > [!NOTE]
 > All credentials must remain confidential. Never print or commit real connection strings or secrets to source control.
+> When deploying outside of a demo environment, always set `DEMO_MODE=false` and rotate `JWT_SECRET`.
 
 ---
 
@@ -95,18 +96,23 @@ npm run db:verify
    # Expected: 200 {"status":"ok","db":"up","redis":"disabled"}
    ```
 
-2. **Verify Demo Status**:
+2. **Verify Demo Config / Status**:
    ```bash
-   curl -i https://<your-vercel-domain>/api/v1/auth/demo-status
-   # Expected: 200 {"demoMode":true}
+   curl -i https://<your-vercel-domain>/api/v1/auth/config
+   # Expected: 200 {"demoMode":true} (or false for production)
    ```
 
-3. **Verify Demo Authentication on Vercel**:
+3. **Verify Authentication Flow on Vercel**:
    - Navigate to `https://<your-vercel-domain>/login`.
-   - Click **Student Demo** $\rightarrow$ verifies student dashboard redirection.
-   - Click **Faculty Demo**, **Mentor Demo**, **HOD Demo**, **Admin Demo**.
-   - Test manual login with seeded credentials.
-   - Test logout $\rightarrow$ clears session and redirects to `/login`.
+   - When `DEMO_MODE=true`:
+     - Quick demo buttons and Seeded Demo Accounts box are visible.
+     - Click **Student Demo** $\rightarrow$ verifies student dashboard redirection.
+     - Test manual login with seeded credentials (`student01@demo.edu`, etc.).
+   - When `DEMO_MODE=false`:
+     - Only the email/password form is displayed.
+     - Direct `POST /api/v1/auth/demo-login` returns `404 Not Found`.
+     - Manual login functions securely for all authorized users.
+   - Test logout $\rightarrow$ clears tokens and redirects to `/login`.
 
 ---
 
@@ -116,5 +122,6 @@ npm run db:verify
 |---|---|---|
 | **Database connection timeout / error** | `DATABASE_URL` or `DIRECT_URL` environment variables are incorrect or Neon compute is suspended. | 1. Verify `DATABASE_URL` and `DIRECT_URL` in Vercel Environment Variables.<br>2. Confirm connection string contains `connect_timeout=15&sslmode=require`.<br>3. Check Neon console to ensure compute endpoint is active. |
 | **Prisma Client engine not found on Vercel** | Missing query engine binary targets for AWS Lambda/Vercel runtime environment. | 1. Ensure `packages/database/prisma/schema.prisma` specifies `binaryTargets = ["native", "rhel-openssl-3.0.x"]`.<br>2. Ensure `apps/web/next.config.ts` includes `serverExternalPackages: ["@prisma/client", "prisma"]`. |
-| **`403 Demo login is disabled`** | `DEMO_MODE` environment variable on Vercel is unset, `false`, or not equal to `"true"`. | Set `DEMO_MODE=true` in Vercel Project Settings $\rightarrow$ Environment Variables, and trigger a redeployment. |
+| **`404 Demo login is disabled`** | `DEMO_MODE` environment variable on Vercel is unset, `false`, or not equal to `"true"`. | In demo environments, set `DEMO_MODE=true` in Vercel Project Settings $\rightarrow$ Environment Variables and redeploy. In non-demo environments, this 404 is the intended hardened behavior. |
+| **`429 Too Many Requests` on `/login`** | Rate limiting exceeded (10 attempts per 15 minutes per IP+email). | Wait for the 15-minute cooldown period or test with alternate credentials/IP. |
 | **`500 Internal Server Error` on API routes** | Database connection failure or unhandled exception in Fastify route handler. | Check Vercel Function logs under the **Logs** tab. Fastify inject errors will display route execution details without leaking secrets. |
