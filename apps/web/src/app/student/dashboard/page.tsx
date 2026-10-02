@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { apiFetch } from "@/lib/api";
 import { StudentShell } from "@/components/student/student-shell";
 import { RiskBadge, RiskLevel } from "@/components/student/risk-badge";
 import { RiskModal } from "@/components/student/risk-modal";
@@ -90,7 +91,7 @@ export default function StudentDashboardPage() {
   const { data, isLoading, error, refetch } = useQuery<StudentOverviewResponse>({
     queryKey: ["student-overview"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/student/overview");
+      const res = await apiFetch("/api/v1/student/overview");
       if (!res.ok) {
         throw new Error(`Failed to load student overview: ${res.statusText}`);
       }

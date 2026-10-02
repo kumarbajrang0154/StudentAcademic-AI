@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useId } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import { StudentShell } from "@/components/student/student-shell";
 import {
   predictedAttendance,
@@ -75,7 +76,7 @@ export default function StudentAttendancePage() {
   const { data, isLoading, error, refetch } = useQuery<StudentAttendanceResponse>({
     queryKey: ["student-attendance"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/student/attendance");
+      const res = await apiFetch("/api/v1/student/attendance");
       if (!res.ok) {
         throw new Error(`Failed to load attendance: ${res.statusText}`);
       }
@@ -143,7 +144,7 @@ export default function StudentAttendancePage() {
       currentAttended: number;
       currentTotal: number;
     }) => {
-      const res = await fetch("/api/v1/attendance/simulator", {
+      const res = await apiFetch("/api/v1/attendance/simulator", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import { StudentShell } from "@/components/student/student-shell";
 import {
   Calendar as CalendarIcon,
@@ -51,7 +52,7 @@ export default function StudentCalendarPage() {
   const { data, isLoading, error, refetch } = useQuery<CalendarApiResponse>({
     queryKey: ["student-calendar"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/student/calendar");
+      const res = await apiFetch("/api/v1/student/calendar");
       if (!res.ok) throw new Error("Failed to load academic calendar");
       return res.json();
     },

@@ -26,6 +26,7 @@ import {
   Cell,
   ReferenceLine,
 } from "recharts";
+import { apiFetch } from "@/lib/api";
 import { RiskBadge } from "./risk-badge";
 
 interface FactorAttribution {
@@ -92,7 +93,7 @@ export function RiskModal({
   const { data, isLoading, error, refetch } = useQuery<RiskExplanationResponse>({
     queryKey: ["risk-explanation", studentId, courseId],
     queryFn: async () => {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/v1/students/${encodeURIComponent(studentId)}/risk-explanation?courseId=${encodeURIComponent(courseId)}`,
       );
       if (!res.ok) {

@@ -97,6 +97,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         maxAge: 7 * 24 * 60 * 60,
       });
 
+      reply.setCookie("accessToken", accessToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 15 * 60,
+      });
+
       return reply.send({
         accessToken,
         user: {
@@ -175,6 +183,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 7 * 24 * 60 * 60,
+    });
+
+    reply.setCookie("accessToken", accessToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 15 * 60,
     });
 
     return reply.send({
@@ -287,6 +303,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       maxAge: 7 * 24 * 60 * 60,
     });
 
+    reply.setCookie("accessToken", newAccessToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 15 * 60,
+    });
+
     return reply.send({
       accessToken: newAccessToken,
       user: {
@@ -316,6 +340,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
 
     reply.clearCookie("refreshToken", { path: "/" });
+    reply.clearCookie("accessToken", { path: "/" });
     return reply.send({ message: "Logged out successfully" });
   });
 

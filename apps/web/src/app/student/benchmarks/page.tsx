@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import { StudentShell } from "@/components/student/student-shell";
 import {
   BarChart2,
@@ -57,7 +58,7 @@ export default function StudentBenchmarksPage() {
   const { data: overviewData } = useQuery<{ courses: CourseOption[] }>({
     queryKey: ["student-overview"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/student/overview");
+      const res = await apiFetch("/api/v1/student/overview");
       if (!res.ok) throw new Error("Failed to load courses");
       return res.json();
     },
@@ -79,7 +80,7 @@ export default function StudentBenchmarksPage() {
   } = useQuery<BenchmarksResponse>({
     queryKey: ["student-benchmarks", selectedCourseId],
     queryFn: async () => {
-      const res = await fetch(`/api/v1/student/benchmarks?courseId=${selectedCourseId}`);
+      const res = await apiFetch(`/api/v1/student/benchmarks?courseId=${selectedCourseId}`);
       if (!res.ok) throw new Error("Failed to load benchmarks");
       return res.json();
     },

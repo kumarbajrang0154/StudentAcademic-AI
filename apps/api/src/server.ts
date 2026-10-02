@@ -72,6 +72,10 @@ export async function buildServer(
     secret:
       process.env.JWT_SECRET ||
       "dev-secret-super-secure-jwt-key-student-academic-ai-32chars",
+    cookie: {
+      cookieName: "accessToken",
+      signed: false,
+    },
   });
 
   await app.register(rateLimit, {

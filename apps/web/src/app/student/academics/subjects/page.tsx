@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { apiFetch } from "@/lib/api";
 import { StudentShell } from "@/components/student/student-shell";
 import { RiskBadge, RiskLevel } from "@/components/student/risk-badge";
 import { RiskModal } from "@/components/student/risk-modal";
@@ -106,7 +107,7 @@ function StudentSubjectsContent() {
   } = useQuery<{ courses: CourseListItem[] }>({
     queryKey: ["student-overview"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/student/overview");
+      const res = await apiFetch("/api/v1/student/overview");
       if (!res.ok) throw new Error("Failed to load enrolled courses");
       return res.json();
     },
@@ -120,7 +121,7 @@ function StudentSubjectsContent() {
   } = useQuery<CourseDetailResponse>({
     queryKey: ["student-course-detail", selectedDrawerCourseId],
     queryFn: async () => {
-      const res = await fetch(`/api/v1/student/courses/${selectedDrawerCourseId}`);
+      const res = await apiFetch(`/api/v1/student/courses/${selectedDrawerCourseId}`);
       if (!res.ok) throw new Error("Failed to load course details");
       return res.json();
     },

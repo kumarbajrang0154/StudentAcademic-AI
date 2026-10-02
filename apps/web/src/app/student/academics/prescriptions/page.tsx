@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import { StudentShell } from "@/components/student/student-shell";
 import {
   Sparkles,
@@ -44,7 +45,7 @@ export default function StudentPrescriptionsPage() {
   const { data, isLoading, error, refetch } = useQuery<PrescriptionsResponse>({
     queryKey: ["student-prescriptions"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/student/prescriptions");
+      const res = await apiFetch("/api/v1/student/prescriptions");
       if (!res.ok) throw new Error("Failed to load prescribed study plan");
       return res.json();
     },
