@@ -1,0 +1,23 @@
+{
+  "name": "student-academic-ai",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.8.1",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "db:generate": "pnpm --filter @student-academic-ai/database db:generate",
+    "db:migrate": "pnpm --filter @student-academic-ai/database db:migrate",
+    "db:seed": "pnpm --filter @student-academic-ai/database db:seed"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "prettier": "^3.5.2",
+    "turbo": "^2.4.4",
+    "typescript": "^5.8.2"
+  }
+}
