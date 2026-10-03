@@ -859,10 +859,10 @@ export async function updateIntervention(
   const updated = await prisma.intervention.update({
     where: { id },
     data: {
-      status: data.status ?? existing.status,
-      notes: data.notes !== undefined ? data.notes : existing.notes,
-      actionItems: data.actionItems !== undefined ? data.actionItems : existing.actionItems,
-      completedAt: data.status === InterventionStatus.COMPLETED ? new Date() : existing.completedAt,
+      ...(data.status !== undefined && { status: data.status }),
+      ...(data.notes !== undefined && { notes: data.notes }),
+      ...(data.actionItems !== undefined && { actionItems: data.actionItems }),
+      ...(data.status === InterventionStatus.COMPLETED && { completedAt: new Date() }),
     },
   });
 
@@ -922,9 +922,9 @@ export async function createEscalationRequest(
     if (!assignment) throw new Error("FORBIDDEN_NOT_MENTEE");
   }
 
-  // Idempotent: return existing OPEN case if found
+  // Idempotent: return existing active case if found
   const existingCase = await prisma.escalationCase.findFirst({
-    where: { studentId, status: "OPEN" },
+    where: { studentId, status: { in: ["OPEN", "ESCALATED"] } },
   });
   if (existingCase) {
     return existingCase;

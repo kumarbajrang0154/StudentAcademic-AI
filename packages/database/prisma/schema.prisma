@@ -93,6 +93,8 @@ model User {
   notifications           Notification[]
   escalationCasesAsStudent EscalationCase[]        @relation("StudentEscalations")
   escalationsCreated      EscalationCase[]         @relation("CreatedEscalations")
+  escalationsDispatched   EscalationCase[]         @relation("DispatchedEscalations")
+  escalationsAssigned     EscalationCase[]         @relation("AssignedEscalations")
   auditLogs               AuditLog[]               @relation("UserAuditLogs")
   guardianContacts        GuardianContact[]
   refreshTokens           RefreshToken[]
@@ -371,35 +373,69 @@ model TimetableSlot {
 }
 
 model Notification {
-  id        String    @id @default(cuid())
+  id        String          @id @default(cuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel   String
   type      String
   payload   Json
-  status    String    @default("PENDING")
+  status    String          @default("PENDING")
   readAt    DateTime?
   link      String?
   sentAt    DateTime?
-  createdAt DateTime  @default(now())
+  caseId    String?
+  case      EscalationCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  createdAt DateTime        @default(now())
 
   @@index([userId, status])
+  @@index([caseId])
 }
 
 model EscalationCase {
-  id          String   @id @default(cuid())
-  studentId   String
-  student     User     @relation("StudentEscalations", fields: [studentId], references: [id], onDelete: Cascade)
-  reason      String
-  tier        Int      @default(1)
-  status      String   @default("OPEN")
-  createdById String
-  createdBy   User     @relation("CreatedEscalations", fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String         @id @default(cuid())
+  studentId       String
+  student         User           @relation("StudentEscalations", fields: [studentId], references: [id], onDelete: Cascade)
+  reason          String
+  tier            Int            @default(1)
+  status          String         @default("OPEN")
+  severity        String         @default("STANDARD")
+  triggerChannels Json?
+  dispatchedAt    DateTime?
+  dispatchedById  String?
+  dispatchedBy    User?          @relation("DispatchedEscalations", fields: [dispatchedById], references: [id], onDelete: SetNull)
+  resolutionNote  String?
+  resolvedAt      DateTime?
+  assignedToId    String?
+  assignedTo      User?          @relation("AssignedEscalations", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdById     String?
+  createdBy       User?          @relation("CreatedEscalations", fields: [createdById], references: [id], onDelete: SetNull)
+  notifications   Notification[]
+  dispatchJobs    DispatchJob[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@index([studentId, status])
   @@index([createdById])
+  @@index([status, tier])
+}
+
+model DispatchJob {
+  id                  String         @id @default(cuid())
+  caseId              String
+  case                EscalationCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  status              String         @default("QUEUED")
+  estimatedMs         Int            @default(1500)
+  notificationsCount  Int            @default(0)
+  calendarHoldCreated Boolean        @default(false)
+  interventionId      String?
+  error               String?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@index([caseId])
+  @@index([status])
 }
 
 model AuditLog {

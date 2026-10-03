@@ -2,6 +2,9 @@ import "dotenv/config";
 import { buildServer, buildApp, BuildServerOptions } from "./server.js";
 
 export { buildServer, buildApp, BuildServerOptions };
+export * from "./lib/rbac.js";
+export * from "./services/escalation.service.js";
+export * from "./services/admin.service.js";
 
 const PORT = Number(process.env.PORT) || Number(process.env.API_PORT) || 4000;
 const HOST = process.env.HOST || "0.0.0.0";

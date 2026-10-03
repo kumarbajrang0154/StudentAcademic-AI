@@ -1,3 +1,9 @@
+import dotenv from 'dotenv';
+import path from 'path';
+dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 import {
   PrismaClient,
   Role,
@@ -826,7 +832,8 @@ async function main() {
   );
   console.log(`✓ Successfully updated metrics for all ${allEnrollments.length} course enrollments`);
 
-  // 10. Intervention for student01
+  // 10. Interventions
+  // 10a. Scheduled intervention for student01
   await prisma.intervention.create({
     data: {
       studentId: students[0]!.id,
@@ -838,7 +845,37 @@ async function main() {
     },
   });
 
-  console.log('✅ Database seeding (Module 2) finished successfully.');
+  // 10b. 6 historical COMPLETED interventions for non-scripted students (35-60 days ago)
+  const allCourses = await prisma.course.findMany({ select: { id: true, code: true } });
+  const preScores = [42.0, 48.0, 52.0, 45.0, 50.0, 55.0];
+  const daysAgoList = [36, 42, 45, 50, 54, 58];
+
+  for (let i = 0; i < 6; i++) {
+    const student = students[4 + i]!; // non-scripted student (student05 to student10)
+    const targetCourse = allCourses[i % allCourses.length]!;
+    const scheduledAtDate = new Date(Date.now() - daysAgoList[i]! * 24 * 60 * 60 * 1000);
+    const completedAtDate = new Date(scheduledAtDate.getTime() + 30 * 60 * 1000);
+
+    await prisma.intervention.create({
+      data: {
+        studentId: student.id,
+        mentorId: mentor.id,
+        courseId: targetCourse.id,
+        title: `Academic Mastery Intervention (${targetCourse.code})`,
+        description: `Targeted unit reinforcement session for ${targetCourse.code}.`,
+        status: InterventionStatus.COMPLETED,
+        scheduledFor: scheduledAtDate,
+        scheduledAt: scheduledAtDate,
+        completedAt: completedAtDate,
+        durationMin: 30,
+        preScoreAvg: preScores[i]!,
+        // postScoreAvg intentionally null so efficacy page computes it from real assessment scores via courseMastery
+        notes: 'seeded demo data',
+      },
+    });
+  }
+
+  console.log('✅ Database seeding (Module 2 & Module 7) finished successfully.');
 }
 
 main()
