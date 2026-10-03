@@ -86,6 +86,8 @@ model User {
   interventionsAsMentor      Intervention[]        @relation("MentorInterventions")
   mentorAssignmentsAsStudent MentorAssignment[]    @relation("StudentMentorAssignments")
   mentorAssignmentsAsMentor  MentorAssignment[]    @relation("MentorAssignments")
+  mentorNotesWritten         MentorNote[]          @relation("MentorNotes")
+  mentorNotesReceived        MentorNote[]          @relation("StudentMentorNotes")
 
   // Governance & Alerts
   notifications           Notification[]
@@ -117,6 +119,7 @@ model Course {
   assessments    Assessment[]
   outcomes       CourseOutcome[]
   timetableSlots TimetableSlot[]
+  interventions  Intervention[]
 
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -240,18 +243,27 @@ model Intervention {
   student      User               @relation("StudentInterventions", fields: [studentId], references: [id], onDelete: Cascade)
   mentorId     String
   mentor       User               @relation("MentorInterventions", fields: [mentorId], references: [id], onDelete: Restrict)
-  title        String
-  description  String
+  courseId     String?
+  course       Course?            @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  title        String             @default("Academic Mentoring Session")
+  description  String             @default("")
   status       InterventionStatus @default(SCHEDULED)
-  scheduledFor DateTime
+  scheduledFor DateTime           @default(now())
+  scheduledAt  DateTime?
+  durationMin  Int                @default(15)
   completedAt  DateTime?
   notes        String?
+  actionItems  Json?
+  createdById  String?
+  preScoreAvg  Float?
+  postScoreAvg Float?
 
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 
   @@index([studentId, status])
   @@index([mentorId])
+  @@index([courseId])
 }
 
 model MentorAssignment {
@@ -366,6 +378,8 @@ model Notification {
   type      String
   payload   Json
   status    String    @default("PENDING")
+  readAt    DateTime?
+  link      String?
   sentAt    DateTime?
   createdAt DateTime  @default(now())
 
@@ -443,3 +457,15 @@ model Resource {
   @@index([topicTag])
 }
 
+model MentorNote {
+  id        String   @id @default(cuid())
+  mentorId  String
+  mentor    User     @relation("MentorNotes", fields: [mentorId], references: [id], onDelete: Cascade)
+  studentId String
+  student   User     @relation("StudentMentorNotes", fields: [studentId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([mentorId, studentId])
+  @@index([studentId])
+}

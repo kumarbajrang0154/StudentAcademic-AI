@@ -46,3 +46,11 @@ export {
   type VoiceMarksResult,
 } from "./voice.js";
 
+export {
+  findInterventionSlot,
+  type TimetableSlotInput,
+  type ExistingInterventionInput,
+  type FindSlotOptions,
+  type SlotResult,
+  type FindSlotResponse,
+} from "./slot.js";

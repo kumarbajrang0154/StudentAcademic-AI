@@ -211,47 +211,62 @@ describe("Faculty Portal RBAC & Scope Tests", () => {
       },
     });
 
-    const currentScore = initialScoreRec?.score ?? 15;
-    const newScore = currentScore === 15 ? 18 : 15;
+    const currentScore = initialScoreRec?.score ?? 45;
+    const newScore = currentScore === 45 ? 42 : 45;
 
-    // Attempt modification WITHOUT justification -> must 400
-    const resNoJustification = await app.inject({
-      method: "POST",
-      url: "/api/v1/marks/batch",
-      headers: { authorization: `Bearer ${faculty1Token}` },
-      payload: {
-        assessmentId: assessment!.id,
-        entries: [{ studentId: student!.id, score: newScore }],
-      },
-    });
-    expect(resNoJustification.statusCode).toBe(400);
-    expect(JSON.parse(resNoJustification.body).message).toContain("Justification is required");
+    try {
+      // Attempt modification WITHOUT justification -> must 400
+      const resNoJustification = await app.inject({
+        method: "POST",
+        url: "/api/v1/marks/batch",
+        headers: { authorization: `Bearer ${faculty1Token}` },
+        payload: {
+          assessmentId: assessment!.id,
+          entries: [{ studentId: student!.id, score: newScore }],
+        },
+      });
+      expect(resNoJustification.statusCode).toBe(400);
+      expect(JSON.parse(resNoJustification.body).message).toContain("Justification is required");
 
-    // Attempt modification WITH justification -> must 200 and create AuditLog
-    const justificationReason = "Re-evaluation of Question 3 calculation error";
-    const resWithJustification = await app.inject({
-      method: "POST",
-      url: "/api/v1/marks/batch",
-      headers: { authorization: `Bearer ${faculty1Token}` },
-      payload: {
-        assessmentId: assessment!.id,
-        entries: [{ studentId: student!.id, score: newScore }],
-        justification: justificationReason,
-      },
-    });
-    expect(resWithJustification.statusCode).toBe(200);
+      // Attempt modification WITH justification -> must 200 and create AuditLog
+      const justificationReason = "Re-evaluation of Question 3 calculation error";
+      const resWithJustification = await app.inject({
+        method: "POST",
+        url: "/api/v1/marks/batch",
+        headers: { authorization: `Bearer ${faculty1Token}` },
+        payload: {
+          assessmentId: assessment!.id,
+          entries: [{ studentId: student!.id, score: newScore }],
+          justification: justificationReason,
+        },
+      });
+      expect(resWithJustification.statusCode).toBe(200);
 
-    // Verify AuditLog row exists
-    const auditRow = await prisma.auditLog.findFirst({
-      where: {
-        entity: "StudentScore",
-        justification: justificationReason,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    expect(auditRow).toBeDefined();
-    expect(auditRow!.justification).toBe(justificationReason);
-  }, 35000);
+      // Verify AuditLog row exists
+      const auditRow = await prisma.auditLog.findFirst({
+        where: {
+          entity: "StudentScore",
+          justification: justificationReason,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      expect(auditRow).toBeDefined();
+      expect(auditRow!.justification).toBe(justificationReason);
+    } finally {
+      // Non-destructive cleanup: revert score back to original
+      await app.inject({
+        method: "POST",
+        url: "/api/v1/marks/batch",
+        headers: { authorization: `Bearer ${faculty1Token}` },
+        payload: {
+          assessmentId: assessment!.id,
+          entries: [{ studentId: student!.id, score: currentScore }],
+          justification: "Reverting test edit to restore canonical seed state",
+        },
+      });
+      await recomputeEnrollment(student!.id, cs101Id);
+    }
+  }, 60000);
 
   it("enforces assessment weight sum <= 100% on creation", async () => {
     const existing = await prisma.assessment.aggregate({

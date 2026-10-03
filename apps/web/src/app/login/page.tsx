@@ -3,6 +3,7 @@
 import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { getSafePostLoginRedirect } from "@/lib/auth-redirect";
 import {
   GraduationCap,
   BookOpen,
@@ -29,29 +30,9 @@ function LoginForm() {
   const [loadingRole, setLoadingRole] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const routeByRole = (role: string) => {
-    switch (role) {
-      case "STUDENT":
-        return "/student/dashboard";
-      case "FACULTY":
-      case "MENTOR":
-        return "/faculty/dashboard";
-      case "HOD":
-      case "ADMIN":
-        return "/admin/dashboard";
-      default:
-        return "/student/dashboard";
-    }
-  };
-
   const handlePostLoginRedirect = (userRole?: string) => {
-    if (next && next.startsWith("/")) {
-      router.push(next);
-    } else if (userRole) {
-      router.push(routeByRole(userRole));
-    } else {
-      router.push("/student/dashboard");
-    }
+    const destination = getSafePostLoginRedirect(next, userRole);
+    router.push(destination);
   };
 
   const handleManualLogin = async (e: React.FormEvent) => {

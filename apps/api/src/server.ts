@@ -18,6 +18,9 @@ import {
 import { facultyRoutes } from "./routes/faculty.js";
 import { attendanceRoutes } from "./routes/attendance.js";
 import { marksRoutes } from "./routes/marks.js";
+import { mentorRoutes } from "./routes/mentor.js";
+import { interventionRoutes } from "./routes/interventions.js";
+import { notificationRoutes } from "./routes/notifications.js";
 import {
   authenticate,
   PERMISSION_MATRIX,
@@ -111,6 +114,18 @@ export async function buildServer(
 
   await app.register(studentRiskRoutes, {
     prefix: "/api/v1/students",
+  });
+
+  await app.register(mentorRoutes, {
+    prefix: "/api/v1/mentor",
+  });
+
+  await app.register(interventionRoutes, {
+    prefix: "/api/v1/interventions",
+  });
+
+  await app.register(notificationRoutes, {
+    prefix: "/api/v1/notifications",
   });
 
   // Scope introspection endpoint

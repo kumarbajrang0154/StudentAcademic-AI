@@ -112,9 +112,6 @@ export function canViewStudent(
   }
   if (user.role === "FACULTY") {
     if (student.enrolledCourseFacultyIds?.includes(user.id)) return true;
-    if (user.departmentId && user.departmentId === student.departmentId) {
-      return true;
-    }
     return false;
   }
   return false;

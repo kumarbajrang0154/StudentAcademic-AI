@@ -84,6 +84,19 @@ async function main() {
   console.log(`Mentor Assignments:${mentorAssignments} (expected 10)`);
   if (mentorAssignments !== 10) throw new Error(`Assertion failed: Expected 10 mentor assignments, found ${mentorAssignments}`);
 
+  const mentor1Mentees = await prisma.mentorAssignment.findMany({
+    where: { active: true, mentor: { email: "mentor1@demo.edu" } },
+    include: { student: { select: { email: true } } },
+  });
+  const menteeEmails = new Set(mentor1Mentees.map((m) => m.student.email));
+  const requiredMentees = ["student01@demo.edu", "student02@demo.edu", "student03@demo.edu"];
+  for (const req of requiredMentees) {
+    if (!menteeEmails.has(req)) {
+      throw new Error(`Assertion failed: Expected mentor1 to have mentee ${req}`);
+    }
+  }
+  console.log(`✓ Verified: mentor1 mentees include student01, student02, student03`);
+
   // 12. GuardianContact with consent: 40 students
   const guardianContacts = await prisma.guardianContact.count({ where: { consentGiven: true } });
   console.log(`Guardian Contacts: ${guardianContacts} (expected 40)`);

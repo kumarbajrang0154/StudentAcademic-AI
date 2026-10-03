@@ -7,7 +7,6 @@ import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard,
   Mic,
-  Users,
   LogOut,
   GraduationCap,
   Loader2,
@@ -31,12 +30,15 @@ export function FacultyShell({ children }: FacultyShellProps) {
       } else if (user.role === "STUDENT") {
         // A STUDENT is redirected to /student/dashboard
         router.push("/student/dashboard");
+      } else if (user.role === "MENTOR") {
+        // MENTOR is redirected to /mentor/dashboard
+        router.push("/mentor/dashboard");
       }
-      // Allowed: FACULTY, MENTOR, HOD, ADMIN
+      // Allowed: FACULTY, HOD, ADMIN
     }
   }, [user, isLoading, pathname, router]);
 
-  if (isLoading || !user || user.role === "STUDENT") {
+  if (isLoading || !user || user.role === "STUDENT" || user.role === "MENTOR") {
     return (
       <div className="min-h-screen bg-[#090D16] flex items-center justify-center text-white">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
@@ -44,29 +46,23 @@ export function FacultyShell({ children }: FacultyShellProps) {
     );
   }
 
-  const isMentor = user.role === "MENTOR";
+  // Note: isMentor can only be true when role === MENTOR, which is redirected above.
+  // We keep it as a string check for the portal label display.
+  const isMentor = (user.role as string) === "MENTOR";
 
-  const navItems = isMentor
-    ? [
-        {
-          href: "/faculty/dashboard",
-          label: "My Mentees",
-          icon: Users,
-        },
-      ]
-    : [
-        {
-          href: "/faculty/dashboard",
-          label: "Courses & Cohorts",
-          icon: LayoutDashboard,
-        },
-        {
-          href: "/faculty/voice-entry",
-          label: "Voice Entry (SCR-03)",
-          icon: Mic,
-          badge: "AI Live",
-        },
-      ];
+  const navItems = [
+    {
+      href: "/faculty/dashboard",
+      label: "Courses & Cohorts",
+      icon: LayoutDashboard,
+    },
+    {
+      href: "/faculty/voice-entry",
+      label: "Voice Entry (SCR-03)",
+      icon: Mic,
+      badge: "AI Live",
+    },
+  ];
 
   const getRoleBadge = (role: string) => {
     switch (role) {

@@ -31,6 +31,12 @@ export async function recomputeEnrollment(
   courseId: string,
   now: Date = new Date(),
 ): Promise<RecomputeEnrollmentResult> {
+  const existingEnrollment = await prisma.courseEnrollment.findFirst({
+    where: { studentId, courseId },
+    select: { riskCategory: true },
+  });
+  const previousRisk = existingEnrollment?.riskCategory;
+
   // 1. Attendance Records for this student in this course
   const attendanceRecords = await prisma.attendanceRecord.findMany({
     where: {
@@ -162,6 +168,14 @@ export async function recomputeEnrollment(
     },
   });
 
+  await notifyMentorIfRiskWorsenedToCritical(
+    studentId,
+    courseId,
+    previousRisk,
+    category,
+    now,
+  );
+
   return {
     studentId,
     courseId,
@@ -210,6 +224,7 @@ export async function recomputeCourseEnrollments(
       id: true,
       studentId: true,
       courseId: true,
+      riskCategory: true,
     },
   });
 
@@ -362,6 +377,19 @@ export async function recomputeCourseEnrollments(
   // Execute all updates in one transaction
   await prisma.$transaction(updatePromises);
 
+  for (const enr of enrollments) {
+    const res = results.find((r) => r.studentId === enr.studentId);
+    if (res) {
+      await notifyMentorIfRiskWorsenedToCritical(
+        enr.studentId,
+        courseId,
+        enr.riskCategory,
+        res.riskCategory,
+        now,
+      );
+    }
+  }
+
   return results;
 }
 
@@ -384,4 +412,73 @@ export async function recomputeAllEnrollments(
     total += res.length;
   }
   return total;
+}
+
+/**
+ * Creates an IN_APP notification for the student's active mentor when risk worsens to CRITICAL.
+ * Deduped per student + course within 24 hours.
+ */
+export async function notifyMentorIfRiskWorsenedToCritical(
+  studentId: string,
+  courseId: string,
+  previousRiskCategory: RiskCategory | null | undefined,
+  newRiskCategory: RiskCategory,
+  now: Date = new Date(),
+): Promise<void> {
+  // Only trigger if newly worsened to CRITICAL
+  if (
+    newRiskCategory !== RiskCategory.CRITICAL ||
+    previousRiskCategory === RiskCategory.CRITICAL
+  ) {
+    return;
+  }
+
+  const mentorAssignment = await prisma.mentorAssignment.findFirst({
+    where: { studentId, active: true },
+    select: { mentorId: true },
+  });
+
+  if (!mentorAssignment) return;
+
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const recentNotifications = await prisma.notification.findMany({
+    where: {
+      userId: mentorAssignment.mentorId,
+      channel: "IN_APP",
+      type: "RISK_CRITICAL_ALERT",
+      createdAt: { gte: oneDayAgo },
+    },
+    select: { payload: true },
+  });
+
+  const isDuplicate = recentNotifications.some((n) => {
+    const payload = n.payload as { studentId?: string; courseId?: string } | null;
+    return payload?.studentId === studentId && payload?.courseId === courseId;
+  });
+
+  if (isDuplicate) return;
+
+  const [student, course] = await Promise.all([
+    prisma.user.findUnique({ where: { id: studentId }, select: { name: true } }),
+    prisma.course.findUnique({ where: { id: courseId }, select: { code: true } }),
+  ]);
+
+  const deepLink = `/mentor/mentees/${studentId}`;
+
+  await prisma.notification.create({
+    data: {
+      userId: mentorAssignment.mentorId,
+      channel: "IN_APP",
+      type: "RISK_CRITICAL_ALERT",
+      link: deepLink,
+      status: "PENDING",
+      payload: {
+        studentId,
+        courseId,
+        studentName: student?.name ?? "Student",
+        courseCode: course?.code ?? "Course",
+        message: `${student?.name ?? "A mentee"} has worsened to CRITICAL risk in ${course?.code ?? "a course"}.`,
+      },
+    },
+  });
 }

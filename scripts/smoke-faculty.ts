@@ -1,5 +1,6 @@
 import { buildServer } from "../apps/api/src/server.js";
 import { prisma } from "@student-academic-ai/database";
+import { recomputeCourseEnrollments } from "../apps/api/src/services/enrollment.service.js";
 
 const BASE_URL = process.env.API_URL;
 
@@ -55,6 +56,14 @@ async function runFacultySmokeTests() {
     };
   }
 
+  let facultyToken = "";
+  let student01Id = "";
+  let cs101Id = "";
+  let createdSessionDate = "";
+  let targetAssessmentId = "";
+  let originalScore: number | undefined;
+  let marksModified = false;
+
   try {
     // 1. LOGIN AS FACULTY 1 (credentials masked as ****)
     console.log("🔐 1. Authenticating as faculty1@demo.edu (Password: ****)...");
@@ -70,7 +79,7 @@ async function runFacultySmokeTests() {
       throw new Error(`Faculty login failed: ${JSON.stringify(facultyLoginRes.json)}`);
     }
 
-    const facultyToken = facultyLoginRes.json.accessToken;
+    facultyToken = facultyLoginRes.json.accessToken;
     console.log(`✓ Faculty authenticated: ${facultyLoginRes.json.user.name} (${facultyLoginRes.json.user.role})`);
 
     // Also login as student01 to check student API before and after
@@ -88,7 +97,7 @@ async function runFacultySmokeTests() {
     }
 
     const studentToken = studentLoginRes.json.accessToken;
-    const student01Id = studentLoginRes.json.user.id;
+    student01Id = studentLoginRes.json.user.id;
     console.log(`✓ Student authenticated: ${studentLoginRes.json.user.name}`);
 
     // 2. GET FACULTY COURSES
@@ -110,6 +119,7 @@ async function runFacultySmokeTests() {
 
     const cs101 = courses.find((c: any) => c.code === "CS101");
     if (!cs101) throw new Error("CS101 course not found for faculty1");
+    cs101Id = cs101.id;
 
     // 3. CHECK STUDENT01'S CS101 ATTENDANCE AND RISK BEFORE VIA STUDENT API
     console.log("\n📊 3. Checking student01 CS101 telemetry BEFORE new attendance...");
@@ -133,8 +143,7 @@ async function runFacultySmokeTests() {
 
     // 4. PARSE VOICE ATTENDANCE TRANSCRIPT
     console.log("\n🎙️ 4. Parsing voice transcript for attendance batch...");
-    const voiceTranscript =
-      "Roll number 1 present. Roll number 2 to 40 absent.";
+    const voiceTranscript = "Roll number 1 to 40 present except 5 and 9.";
     console.log(`Spoken transcript: "${voiceTranscript}"`);
 
     const parseRes = await requestFn("/api/v1/faculty/voice/parse", {
@@ -157,15 +166,15 @@ async function runFacultySmokeTests() {
     );
 
     // 5. COMMIT ATTENDANCE BATCH FOR A PAST-UNUSED DATE
-    const unusedSessionDate = "2026-07-15T09:00:00Z";
-    console.log(`\n💾 5. Committing attendance batch for past date ${unusedSessionDate}...`);
+    createdSessionDate = "2026-07-15T09:00:00Z";
+    console.log(`\n💾 5. Committing attendance batch for past date ${createdSessionDate}...`);
 
     const attendanceCommitRes = await requestFn("/api/v1/attendance/batch", {
       method: "POST",
       headers: { authorization: `Bearer ${facultyToken}` },
       body: {
         courseId: cs101.id,
-        sessionDate: unusedSessionDate,
+        sessionDate: createdSessionDate,
         entries: parsedData.entries.map((e: any) => ({
           studentId: e.studentId,
           status: e.status,
@@ -218,13 +227,14 @@ async function runFacultySmokeTests() {
     }
 
     const firstAssessment = gradebookRes.json.assessments[0];
+    targetAssessmentId = firstAssessment.id;
     const student01Row = gradebookRes.json.students.find((s: any) => s.studentId === student01Id);
-    const existingScore = student01Row?.scores[firstAssessment.id]?.score ?? 15;
-    const newScore = existingScore === 18 ? 20 : 18;
+    originalScore = student01Row?.scores[firstAssessment.id]?.score ?? 45;
+    const newScore = originalScore === 45 ? 48 : 45;
     const justificationText = "Re-checking calculation on Question 2 due to re-grading request";
 
     console.log(
-      `Modifying ${firstAssessment.title} score for ${student01Row.name}: ${existingScore} -> ${newScore}`,
+      `Modifying ${firstAssessment.title} score for ${student01Row.name}: ${originalScore} -> ${newScore}`,
     );
 
     const marksCommitRes = await requestFn("/api/v1/marks/batch", {
@@ -240,6 +250,7 @@ async function runFacultySmokeTests() {
     if (marksCommitRes.status !== 200) {
       throw new Error(`Marks batch failed: ${JSON.stringify(marksCommitRes.json)}`);
     }
+    marksModified = true;
     console.log("✓ Marks batch successfully committed!");
 
     // 8. QUERY & PRINT AUDITLOG ROW
@@ -269,6 +280,41 @@ async function runFacultySmokeTests() {
 
     console.log("\n🎉 ALL FACULTY PORTAL SMOKE VERIFICATIONS PASSED SUCCESSFULLY!");
   } finally {
+    console.log("\n🧹 Running non-destructive cleanup...");
+    try {
+      if (cs101Id && createdSessionDate) {
+        const session = await prisma.classSession.findFirst({
+          where: { courseId: cs101Id, sessionDate: new Date(createdSessionDate) },
+        });
+        if (session) {
+          await prisma.attendanceRecord.deleteMany({ where: { sessionId: session.id } });
+          await prisma.classSession.delete({ where: { id: session.id } });
+          console.log(`   ✓ Cleaned up smoke test ClassSession (${session.id}) and AttendanceRecords`);
+        }
+      }
+
+      if (marksModified && targetAssessmentId && student01Id && originalScore !== undefined) {
+        await requestFn("/api/v1/marks/batch", {
+          method: "POST",
+          headers: { authorization: `Bearer ${facultyToken}` },
+          body: {
+            assessmentId: targetAssessmentId,
+            entries: [{ studentId: student01Id, score: originalScore }],
+            justification: "Reverting smoke test score to restore scripted demo baseline",
+          },
+        });
+        console.log(`   ✓ Reverted score on assessment ${targetAssessmentId} back to ${originalScore}`);
+      }
+
+      if (cs101Id) {
+        await recomputeCourseEnrollments(cs101Id);
+        console.log("   ✓ Recomputed CS101 enrollments back to demo baseline");
+      }
+      console.log("   ℹ Note: AuditLog rows remain by design (append-only table).");
+    } catch (cleanupErr) {
+      console.warn("   ⚠ Cleanup warning:", cleanupErr);
+    }
+
     if (app) {
       await app.close();
     }

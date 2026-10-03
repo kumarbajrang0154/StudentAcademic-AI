@@ -337,8 +337,7 @@ function VoiceEntryContent() {
   const handlePlayDemo = () => {
     let demoText = "";
     if (mode === "ATTENDANCE") {
-      demoText =
-        "Roll number 1 to 20 present except 5 and 9. 21 to 35 present. 36 on duty, 37 medical leave, 38 to 40 absent.";
+      demoText = "Roll number 1 to 40 present except 5 and 9.";
     } else {
       demoText =
         "Roll 1, 18 marks. Roll 2, 19 marks. Roll 3, 20 out of 20. Roll 4, 16 marks. Roll 5, 17 marks.";

@@ -52,13 +52,11 @@ async function resolveAndAuthorizeStudent(
   user: AuthUser,
   requestedStudentId?: string,
 ): Promise<{ authorized: boolean; studentId: string; errorStatus?: number; errorMessage?: string }> {
-  const targetId = requestedStudentId || user.id;
-
   if (user.role === "STUDENT") {
     if (requestedStudentId && requestedStudentId !== user.id) {
       return {
         authorized: false,
-        studentId: targetId,
+        studentId: user.id,
         errorStatus: 403,
         errorMessage: "Students may only access their own records",
       };
@@ -66,41 +64,66 @@ async function resolveAndAuthorizeStudent(
     return { authorized: true, studentId: user.id };
   }
 
+  if (!requestedStudentId) {
+    return {
+      authorized: false,
+      studentId: "",
+      errorStatus: 400,
+      errorMessage: "Staff must provide a studentId query parameter",
+    };
+  }
+
   // For staff: verify student exists and check permission
   const student = await prisma.user.findUnique({
-    where: { id: targetId },
+    where: { id: requestedStudentId },
     select: {
       id: true,
       departmentId: true,
       mentorAssignmentsAsStudent: { select: { mentorId: true, active: true } },
+      enrollments: {
+        select: {
+          course: {
+            select: {
+              sessions: {
+                select: { facultyId: true },
+              },
+            },
+          },
+        },
+      },
     },
   });
 
   if (!student) {
     return {
       authorized: false,
-      studentId: targetId,
+      studentId: requestedStudentId,
       errorStatus: 404,
       errorMessage: "Target student not found",
     };
   }
 
+  const facultyIds = student.enrollments.flatMap((e) =>
+    e.course.sessions.map((s) => s.facultyId),
+  );
+
   const allowed = canViewStudent(user, {
     id: student.id,
     departmentId: student.departmentId,
     mentorAssignments: student.mentorAssignmentsAsStudent,
+    enrolledCourseFacultyIds: facultyIds,
   });
 
   if (!allowed) {
     return {
       authorized: false,
-      studentId: targetId,
+      studentId: requestedStudentId,
       errorStatus: 403,
       errorMessage: "Insufficient privileges to view target student records",
     };
   }
 
-  return { authorized: true, studentId: targetId };
+  return { authorized: true, studentId: requestedStudentId };
 }
 
 export const studentRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {

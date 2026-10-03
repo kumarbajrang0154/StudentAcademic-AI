@@ -31,6 +31,7 @@ async function main() {
   await prisma.guardianContact.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.intervention.deleteMany();
+  await prisma.mentorNote.deleteMany();
   await prisma.mentorAssignment.deleteMany();
   await prisma.questionScore.deleteMany();
   await prisma.studentScore.deleteMany();
@@ -45,12 +46,12 @@ async function main() {
   await prisma.courseEnrollment.deleteMany();
   await prisma.curriculumUnit.deleteMany();
   await prisma.course.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.department.deleteMany();
 
-  // 1. Department
-  const department = await prisma.department.create({
-    data: {
+  // 1. Department (upserted to preserve AuditLog references)
+  const department = await prisma.department.upsert({
+    where: { code: 'CSE' },
+    update: { name: 'Computer Science and Engineering' },
+    create: {
       name: 'Computer Science and Engineering',
       code: 'CSE',
     },
@@ -81,8 +82,15 @@ async function main() {
   console.log(`✓ Created 6 Program Outcomes (PO1..PO6)`);
 
   // 2. Admin User
-  const admin = await prisma.user.create({
-    data: {
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@demo.edu' },
+    update: {
+      name: 'System Administrator',
+      role: Role.ADMIN,
+      departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
+    },
+    create: {
       email: 'admin@demo.edu',
       name: 'System Administrator',
       role: Role.ADMIN,
@@ -93,8 +101,15 @@ async function main() {
   console.log(`✓ Created Admin user: ${admin.email}`);
 
   // 3. HOD User
-  const hod = await prisma.user.create({
-    data: {
+  const hod = await prisma.user.upsert({
+    where: { email: 'hod@demo.edu' },
+    update: {
+      name: 'Dr. Alan Turing',
+      role: Role.HOD,
+      departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
+    },
+    create: {
       email: 'hod@demo.edu',
       name: 'Dr. Alan Turing',
       role: Role.HOD,
@@ -105,8 +120,15 @@ async function main() {
   console.log(`✓ Created HOD user: ${hod.email}`);
 
   // 4. Faculty Users (2 members)
-  const faculty1 = await prisma.user.create({
-    data: {
+  const faculty1 = await prisma.user.upsert({
+    where: { email: 'faculty1@demo.edu' },
+    update: {
+      name: 'Prof. Claude Shannon',
+      role: Role.FACULTY,
+      departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
+    },
+    create: {
       email: 'faculty1@demo.edu',
       name: 'Prof. Claude Shannon',
       role: Role.FACULTY,
@@ -115,8 +137,15 @@ async function main() {
     },
   });
 
-  const faculty2 = await prisma.user.create({
-    data: {
+  const faculty2 = await prisma.user.upsert({
+    where: { email: 'faculty2@demo.edu' },
+    update: {
+      name: 'Prof. Grace Hopper',
+      role: Role.FACULTY,
+      departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
+    },
+    create: {
       email: 'faculty2@demo.edu',
       name: 'Prof. Grace Hopper',
       role: Role.FACULTY,
@@ -126,8 +155,15 @@ async function main() {
   });
 
   // 5. Mentor User (1 member)
-  const mentor = await prisma.user.create({
-    data: {
+  const mentor = await prisma.user.upsert({
+    where: { email: 'mentor1@demo.edu' },
+    update: {
+      name: 'Dr. Donald Knuth',
+      role: Role.MENTOR,
+      departmentId: department.id,
+      passwordHash: PASSWORD_HASH,
+    },
+    create: {
       email: 'mentor1@demo.edu',
       name: 'Dr. Donald Knuth',
       role: Role.MENTOR,
@@ -137,19 +173,26 @@ async function main() {
   });
   console.log(`✓ Created Faculty, HOD, Admin, Mentor staff users`);
 
-  // 6. Students (40 students) - Batch created
-  const studentCreateData = [];
+  // 6. Students (40 students) - Upserted
   for (let i = 1; i <= 40; i++) {
     const padded = String(i).padStart(2, '0');
-    studentCreateData.push({
-      email: `student${padded}@demo.edu`,
-      name: `Student ${padded}`,
-      role: Role.STUDENT,
-      departmentId: department.id,
-      passwordHash: PASSWORD_HASH,
+    await prisma.user.upsert({
+      where: { email: `student${padded}@demo.edu` },
+      update: {
+        name: `Student ${padded}`,
+        role: Role.STUDENT,
+        departmentId: department.id,
+        passwordHash: PASSWORD_HASH,
+      },
+      create: {
+        email: `student${padded}@demo.edu`,
+        name: `Student ${padded}`,
+        role: Role.STUDENT,
+        departmentId: department.id,
+        passwordHash: PASSWORD_HASH,
+      },
     });
   }
-  await prisma.user.createMany({ data: studentCreateData });
   const students = await prisma.user.findMany({
     where: { role: Role.STUDENT, departmentId: department.id },
     orderBy: { email: 'asc' },
