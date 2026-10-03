@@ -81,3 +81,12 @@ export {
   type CoPoWeightItem,
 } from "./accreditation.js";
 
+export {
+  checkinStep,
+  checkinCode,
+  currentCheckinCodes,
+  validateCheckinCode,
+  msUntilNextStep,
+  CHECKIN_STEP_MS,
+  CHECKIN_CODE_DIGITS,
+} from "./checkin.js";

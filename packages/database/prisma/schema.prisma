@@ -90,6 +90,7 @@ model User {
   attendanceRecords       AttendanceRecord[]
   studentScores           StudentScore[]
   questionScores          QuestionScore[]
+  checkinWindowsCreated   CheckinWindow[]          @relation("CheckinWindowsCreated")
   
   // Mentorship & Interventions
   interventionsAsStudent     Intervention[]        @relation("StudentInterventions")
@@ -132,6 +133,7 @@ model Course {
   outcomes       CourseOutcome[]
   timetableSlots TimetableSlot[]
   interventions  Intervention[]
+  checkinWindows CheckinWindow[]
 
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -196,6 +198,7 @@ model ClassSession {
   topic             String?
   room              String?
   attendanceRecords AttendanceRecord[]
+  checkinWindows    CheckinWindow[]
 
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -212,11 +215,34 @@ model AttendanceRecord {
   student     User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
   status      AttendanceStatus @default(PRESENT)
   remarks     String?
+  source      String?          // null = faculty entry; "SELF_CHECKIN" = QR self check-in
   recordedAt  DateTime         @default(now())
 
   @@unique([sessionId, studentId])
   @@index([studentId, status])
   @@index([sessionId])
+}
+
+model CheckinWindow {
+  id          String       @id @default(cuid())
+  courseId    String
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  sessionId   String
+  session     ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  secret      String       // HMAC secret, never exposed to clients
+  startsAt    DateTime     @default(now())
+  endsAt      DateTime
+  closedAt    DateTime?    // set by POST .../checkin/close
+  createdById String
+  createdBy   User         @relation("CheckinWindowsCreated", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([courseId])
+  @@index([sessionId])
+  @@index([endsAt])
+  @@index([createdById])
 }
 
 model Assessment {

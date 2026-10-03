@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   RefreshCw,
   Sparkles,
+  QrCode,
 } from "lucide-react";
 
 interface FacultyCourse {
@@ -266,6 +267,14 @@ export default function FacultyDashboardPage() {
                       >
                         <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                         <span>Gradebook</span>
+                      </Link>
+
+                      <Link
+                        href={`/faculty/courses/${course.id}/checkin`}
+                        className="flex-1 min-w-[110px] inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-300 hover:text-white rounded-xl text-xs font-semibold transition border border-emerald-500/30"
+                      >
+                        <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>QR Check-in</span>
                       </Link>
                     </div>
                   </div>
