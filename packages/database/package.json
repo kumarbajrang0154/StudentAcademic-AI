@@ -22,6 +22,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:verify": "tsx scripts/verify-seed.ts",
+    "db:recompute": "tsx scripts/recompute.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --no-error-on-unmatched-pattern"
   },

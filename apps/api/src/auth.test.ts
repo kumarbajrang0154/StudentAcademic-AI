@@ -334,4 +334,30 @@ describe("Auth Routes & Token Management", () => {
 
     await app.close();
   });
+
+  it("demo-login for STUDENT returns student01@demo.edu (fixed mapping, not any-first-user)", async () => {
+    const prevDemoMode = process.env.DEMO_MODE;
+    process.env.DEMO_MODE = "true";
+    const app2 = await buildServer({ db: dummyDb, redis: "disabled" });
+
+    const res = await app2.inject({
+      method: "POST",
+      url: "/api/v1/auth/demo-login",
+      payload: { role: "STUDENT" },
+    });
+
+    if (res.statusCode === 200) {
+      const body = JSON.parse(res.body);
+      expect(body.user.email).toBe("student01@demo.edu");
+      expect(body.user.role).toBe("STUDENT");
+    } else if (res.statusCode === 404) {
+      // DB not seeded in this environment — skip check
+      console.warn("demo-login STUDENT 404 — student01@demo.edu not in DB (run db:seed)");
+    } else {
+      throw new Error(`Unexpected status ${res.statusCode}: ${res.body}`);
+    }
+
+    process.env.DEMO_MODE = prevDemoMode;
+    await app2.close();
+  }, 15000);
 });

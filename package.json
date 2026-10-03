@@ -19,6 +19,7 @@
     "db:migrate": "npm run db:migrate -w @student-academic-ai/database",
     "db:seed": "npm run db:seed -w @student-academic-ai/database",
     "db:verify": "npm run db:verify -w @student-academic-ai/database",
+    "db:recompute": "npm run db:recompute -w @student-academic-ai/database",
     "smoke:student": "tsx scripts/smoke-student.ts",
     "smoke:faculty": "tsx scripts/smoke-faculty.ts",
     "smoke:mentor": "tsx scripts/smoke-mentor.ts",

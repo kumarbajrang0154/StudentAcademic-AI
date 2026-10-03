@@ -76,7 +76,7 @@ export default function FacultyReportsPage() {
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<FacultyReportType>("attendance");
 
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<FacultyReportData | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string>("");
@@ -89,7 +89,7 @@ export default function FacultyReportsPage() {
   useEffect(() => {
     async function loadCourses() {
       try {
-        const res = await apiFetch("/faculty/courses");
+        const res = await apiFetch("/api/v1/faculty/courses");
         if (res.ok) {
           const json = await res.json();
           const list = json.courses || [];
@@ -117,8 +117,8 @@ export default function FacultyReportsPage() {
       try {
         const endpoint =
           activeTab === "attendance"
-            ? `/faculty/reports/attendance?courseId=${selectedCourseId}`
-            : `/faculty/reports/marks?courseId=${selectedCourseId}`;
+            ? `/api/v1/faculty/reports/attendance?courseId=${selectedCourseId}`
+            : `/api/v1/faculty/reports/marks?courseId=${selectedCourseId}`;
 
         const res = await apiFetch(endpoint);
         if (!res.ok) {
@@ -147,8 +147,8 @@ export default function FacultyReportsPage() {
     try {
       const endpoint =
         activeTab === "attendance"
-          ? `/faculty/reports/attendance?courseId=${selectedCourseId}&format=${format}`
-          : `/faculty/reports/marks?courseId=${selectedCourseId}&format=${format}`;
+          ? `/api/v1/faculty/reports/attendance?courseId=${selectedCourseId}&format=${format}`
+          : `/api/v1/faculty/reports/marks?courseId=${selectedCourseId}&format=${format}`;
 
       const res = await apiFetch(endpoint);
       if (!res.ok) {
@@ -266,9 +266,6 @@ export default function FacultyReportsPage() {
           }`}
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">
-              Module 1
-            </span>
             <Users className="w-4 h-4 text-indigo-400" />
           </div>
           <h3 className="font-bold text-white text-base mb-1">Attendance Register</h3>
@@ -286,9 +283,6 @@ export default function FacultyReportsPage() {
           }`}
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">
-              Module 3
-            </span>
             <Award className="w-4 h-4 text-cyan-400" />
           </div>
           <h3 className="font-bold text-white text-base mb-1">Marks & Mastery Register</h3>

@@ -107,7 +107,7 @@ export default function AdminReportsPage() {
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [activeTab, setActiveTab] = useState<ReportType>("attendance");
 
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ReportData | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string>("");
@@ -120,7 +120,7 @@ export default function AdminReportsPage() {
   useEffect(() => {
     async function loadCourses() {
       try {
-        const res = await apiFetch("/admin/courses");
+        const res = await apiFetch("/api/v1/admin/courses");
         if (res.ok) {
           const json = await res.json();
           const list = json.courses || [];
@@ -148,11 +148,11 @@ export default function AdminReportsPage() {
       try {
         let endpoint = "";
         if (activeTab === "attendance") {
-          endpoint = `/admin/reports/attendance?courseId=${selectedCourseId}`;
+          endpoint = `/api/v1/admin/reports/attendance?courseId=${selectedCourseId}`;
         } else if (activeTab === "marks") {
-          endpoint = `/admin/reports/marks?courseId=${selectedCourseId}`;
+          endpoint = `/api/v1/admin/reports/marks?courseId=${selectedCourseId}`;
         } else {
-          endpoint = `/admin/reports/department-analytics`;
+          endpoint = `/api/v1/admin/reports/department-analytics`;
         }
 
         const res = await apiFetch(endpoint);
@@ -181,11 +181,11 @@ export default function AdminReportsPage() {
     try {
       let endpoint = "";
       if (activeTab === "attendance") {
-        endpoint = `/admin/reports/attendance?courseId=${selectedCourseId}&format=${format}`;
+        endpoint = `/api/v1/admin/reports/attendance?courseId=${selectedCourseId}&format=${format}`;
       } else if (activeTab === "marks") {
-        endpoint = `/admin/reports/marks?courseId=${selectedCourseId}&format=${format}`;
+        endpoint = `/api/v1/admin/reports/marks?courseId=${selectedCourseId}&format=${format}`;
       } else {
-        endpoint = `/admin/reports/department-analytics?format=${format}`;
+        endpoint = `/api/v1/admin/reports/department-analytics?format=${format}`;
       }
 
       const res = await apiFetch(endpoint);

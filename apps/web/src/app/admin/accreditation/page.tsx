@@ -78,7 +78,7 @@ export default function AccreditationPage() {
   const [courseData, setCourseData] = useState<CourseAccreditationData | null>(null);
   const [programData, setProgramData] = useState<ProgramAccreditationData | null>(null);
 
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadingFormat, setDownloadingFormat] = useState<string | null>(null);
 
@@ -86,7 +86,7 @@ export default function AccreditationPage() {
   useEffect(() => {
     async function loadCourses() {
       try {
-        const res = await apiFetch("/admin/courses");
+        const res = await apiFetch("/api/v1/admin/courses");
         if (res.ok) {
           const json = await res.json();
           const list = json.courses || [];
@@ -111,7 +111,7 @@ export default function AccreditationPage() {
       try {
         if (viewMode === "course") {
           if (!selectedCourseId) return;
-          const res = await apiFetch(`/admin/accreditation/${selectedCourseId}`);
+          const res = await apiFetch(`/api/v1/admin/accreditation/${selectedCourseId}`);
           if (!res.ok) {
             const errJson = await res.json().catch(() => ({}));
             throw new Error(errJson.message || "Failed to load accreditation data");
@@ -119,7 +119,7 @@ export default function AccreditationPage() {
           const json = await res.json();
           setCourseData(json);
         } else {
-          const res = await apiFetch("/admin/accreditation/program");
+          const res = await apiFetch("/api/v1/admin/accreditation/program");
           if (!res.ok) {
             const errJson = await res.json().catch(() => ({}));
             throw new Error(errJson.message || "Failed to load program accreditation");
@@ -144,8 +144,8 @@ export default function AccreditationPage() {
 
     try {
       const endpoint = viewMode === "course"
-        ? `/admin/reports/accreditation?courseId=${selectedCourseId}&format=${format}`
-        : `/admin/accreditation/program?format=${format}`;
+        ? `/api/v1/admin/reports/accreditation?courseId=${selectedCourseId}&format=${format}`
+        : `/api/v1/admin/accreditation/program?format=${format}`;
 
       const res = await apiFetch(endpoint);
       if (!res.ok) {

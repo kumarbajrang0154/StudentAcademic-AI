@@ -151,3 +151,43 @@ The continuous analysis engine runs bulk calculations across all course enrollme
 - The endpoint performs a constant-time comparison (`crypto.timingSafeEqual`) to reject unauthorized invocations with `401 Unauthorized`.
 - Administrative users (`ADMIN` and `HOD`) can also trigger the analysis on demand from the admin dashboard.
 
+---
+
+## 7. Smoke Tests — Isolation & Safety
+
+### Never Run Smoke Scripts Against the Shared DB
+
+All smoke scripts (`npm run smoke:*`) refuse to execute unless `ALLOW_SMOKE_ON_THIS_DB=true` is set in the local environment. This prevents accidental data corruption of the shared/production database.
+
+```bash
+# Wrong — will be rejected:
+npm run smoke:student
+
+# Correct — only on a dedicated test branch:
+ALLOW_SMOKE_ON_THIS_DB=true npm run smoke:student
+```
+
+### Use a Dedicated Neon Branch for Tests
+
+1. In the [Neon Console](https://console.neon.tech), open your project.
+2. Click **Branches** → **New Branch** → name it `test` or `ci`.
+3. Copy the connection string for the new branch.
+4. Create a `.env.test` (never commit) with `DATABASE_URL` and `DIRECT_URL` pointing to the test branch.
+5. Run smoke tests: `ALLOW_SMOKE_ON_THIS_DB=true DATABASE_URL=<test-url> DIRECT_URL=<test-direct-url> npm run smoke:student`
+
+The test branch is a point-in-time copy that is safe to modify and can be reset any time from the Neon Console.
+
+### Demo Login Account Mapping
+
+The demo login endpoint uses **fixed email mappings** (never "first user with that role"):
+
+| Button  | Email                  |
+|---------|------------------------|
+| STUDENT | student01@demo.edu     |
+| FACULTY | faculty1@demo.edu      |
+| MENTOR  | mentor1@demo.edu       |
+| HOD     | hod@demo.edu           |
+| ADMIN   | admin@demo.edu         |
+
+If the DB is re-created, run `npm run db:seed` to restore these accounts.
+Run `npm run db:recompute` any time to recompute all enrollment metrics without re-seeding.
