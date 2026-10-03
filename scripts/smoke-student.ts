@@ -2,6 +2,15 @@ import { buildServer } from "../apps/api/src/server.js";
 
 const BASE_URL = process.env.API_URL;
 
+if (!process.env.ALLOW_SMOKE_ON_THIS_DB) {
+  console.error(
+    "❌ Smoke scripts refused to run: set ALLOW_SMOKE_ON_THIS_DB=true in your local env first.\n" +
+    "   Never run smoke tests against the shared/production database.\n" +
+    "   Use a dedicated Neon branch (see DEPLOY.md)."
+  );
+  process.exit(1);
+}
+
 interface TestContext {
   token: string;
   user: { id: string; email: string; name: string; role: string };

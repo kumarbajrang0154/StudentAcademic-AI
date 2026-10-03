@@ -2,7 +2,7 @@ import { FastifyPluginAsync } from "fastify";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { prisma, Role } from "@student-academic-ai/database";
+import { prisma } from "@student-academic-ai/database";
 import { authenticate } from "../lib/rbac.js";
 
 const LoginSchema = z.object({
@@ -156,10 +156,19 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const { role } = parsed.data;
-    const user = await prisma.user.findFirst({
-      where: { role: role as Role },
-      orderBy: { email: "asc" },
-    });
+
+    // Fixed demo account mapping — never "first user with that role"
+    const DEMO_EMAILS: Record<string, string> = {
+      STUDENT: "student01@demo.edu",
+      FACULTY: "faculty1@demo.edu",
+      MENTOR:  "mentor1@demo.edu",
+      HOD:     "hod@demo.edu",
+      ADMIN:   "admin@demo.edu",
+    };
+    const demoEmail = DEMO_EMAILS[role];
+    const user = demoEmail
+      ? await prisma.user.findUnique({ where: { email: demoEmail } })
+      : null;
 
     if (!user) {
       return reply.status(404).send({

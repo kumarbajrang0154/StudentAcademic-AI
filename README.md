@@ -153,3 +153,43 @@ All seeded accounts share the demo password `****`:
 - `GET /api/v1/_whoami-scope`: Scope inspection based on RBAC matrix.
 - `GET /api/v1/faculty/courses`: Protected route requiring `FACULTY`, `HOD`, or `ADMIN` role.
 
+---
+
+## Module 10: QR / Code Self Check-in
+
+Serverless-safe, stateless HMAC-based rotating code check-in. No WebSockets. Works on Vercel.
+
+### How it works
+
+1. **Faculty opens a window**: `POST /api/v1/faculty/courses/:courseId/checkin/start { sessionDate, durationMin }` — creates a `CheckinWindow` with a random 32-byte secret and a configurable expiry (default 10 min).
+2. **Faculty sees a rotating 6-digit code** at `/faculty/courses/[courseId]/checkin` — code rotates every 30 seconds using `HMAC-SHA256(secret, step)` where `step = floor(now / 30_000)`. A QR code encodes the student check-in URL.
+3. **Students check in** at `/student/checkin?courseId=...` (via QR scan or sidebar card) by entering the 6-digit code. The backend validates the current and previous step (±30s clock tolerance).
+4. **On success**: an `AttendanceRecord PRESENT` with `source="SELF_CHECKIN"` is created in the session. Enrollment metrics are recomputed for the student only.
+5. **Closing the window**: `POST .../checkin/close` — students not checked in remain **unmarked** for faculty review in the existing Attendance Grid. Nothing is auto-marked ABSENT.
+6. **Faculty reviews** checked-in rows (pre-filled P) alongside unmarked rows, then commits as usual.
+
+### Honest Limitations
+
+> **Shared-code proxying is possible.** A student can share the 6-digit code with an absent classmate via messaging. The 30-second rotation and rate limit (5 attempts/min per IP) reduce — but do not eliminate — this risk. The faculty review step before commit remains the integrity gate.
+
+### API Endpoints
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/v1/faculty/courses/:id/checkin/start` | FACULTY/HOD/ADMIN | Open a check-in window |
+| POST | `/api/v1/faculty/courses/:id/checkin/close` | FACULTY/HOD/ADMIN | Close window |
+| GET  | `/api/v1/faculty/courses/:id/checkin/status` | FACULTY/HOD/ADMIN | Poll: open? count? |
+| GET  | `/api/v1/faculty/courses/:id/checkin/code?windowId=` | window creator only | Current 6-digit code |
+| POST | `/api/v1/student/checkin` | STUDENT | Submit code (5/min rate limit) |
+
+### DB additions (additive, migration `20261003000003`)
+
+- `CheckinWindow`: courseId, sessionId, secret (never exposed), startsAt, endsAt, closedAt, createdById
+- `AttendanceRecord.source`: optional `String` — `null` = faculty entry; `"SELF_CHECKIN"` = QR self check-in
+
+### Core math (`packages/core/src/checkin.ts`)
+
+- `checkinCode(secret, step)` — deterministic 6-digit HMAC code
+- `validateCheckinCode(secret, submitted)` — accepts current and previous step
+- `msUntilNextStep()` — countdown for display
+- Full test coverage: rotation boundary, grace period, duplicate, wrong code, whitespace trim

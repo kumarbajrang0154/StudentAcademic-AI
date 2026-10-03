@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildServer } from "./server.js";
-import { prisma, Role } from "@student-academic-ai/database";
+import { prisma } from "@student-academic-ai/database";
 import {
   recomputeEnrollment,
   recomputeCourseEnrollments,

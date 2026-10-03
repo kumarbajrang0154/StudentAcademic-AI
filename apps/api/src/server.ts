@@ -23,6 +23,7 @@ import { interventionRoutes } from "./routes/interventions.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { adminRoutes } from "./routes/admin.js";
 import { internalRoutes } from "./routes/internal.js";
+import { checkinFacultyRoutes, checkinStudentRoutes } from "./routes/checkin.js";
 import {
   authenticate,
   PERMISSION_MATRIX,
@@ -136,6 +137,14 @@ export async function buildServer(
 
   await app.register(internalRoutes, {
     prefix: "/api/v1/internal",
+  });
+
+  // Module 10: QR / Code Self Check-in
+  await app.register(checkinFacultyRoutes, {
+    prefix: "/api/v1/faculty/courses",
+  });
+  await app.register(checkinStudentRoutes, {
+    prefix: "/api/v1/student",
   });
 
   // Scope introspection endpoint

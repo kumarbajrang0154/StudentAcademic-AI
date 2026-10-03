@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useId } from "react";
+import Link from "next/link";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { StudentShell } from "@/components/student/student-shell";
@@ -20,6 +21,7 @@ import {
   Info,
   CheckCircle2,
   XCircle,
+  QrCode,
 } from "lucide-react";
 
 interface CourseAttendanceItem {
@@ -186,6 +188,29 @@ export default function StudentAttendancePage() {
           <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
           <span>Refresh Records</span>
         </button>
+      </div>
+
+      {/* QR Self Check-in Card — visible whenever there may be an active window */}
+      <div className="mb-6 flex items-center gap-4 p-4 rounded-2xl bg-indigo-600/10 border border-indigo-500/30">
+        <div className="p-2.5 bg-indigo-600/20 rounded-xl shrink-0">
+          <QrCode className="w-5 h-5 text-indigo-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white">Check in to class</p>
+          <p className="text-xs text-slate-400">
+            If your faculty has started a QR check-in session, enter the 6-digit code here.
+          </p>
+        </div>
+        <Link
+          href={
+            selectedCourseId !== "ALL"
+              ? `/student/checkin?courseId=${selectedCourseId}`
+              : "/student/checkin"
+          }
+          className="shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition whitespace-nowrap"
+        >
+          Open Check-in →
+        </Link>
       </div>
 
       {isLoading && (

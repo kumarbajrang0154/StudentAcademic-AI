@@ -57,6 +57,22 @@ async function main() {
   await prisma.curriculumUnit.deleteMany();
   await prisma.course.deleteMany();
 
+  // Clean non-canonical users and departments created by integration tests
+  const canonicalEmails = [
+    'admin@demo.edu',
+    'hod@demo.edu',
+    'faculty1@demo.edu',
+    'faculty2@demo.edu',
+    'mentor1@demo.edu',
+    ...Array.from({ length: 40 }, (_, i) => `student${String(i + 1).padStart(2, '0')}@demo.edu`),
+  ];
+  await prisma.user.deleteMany({
+    where: { email: { notIn: canonicalEmails } },
+  });
+  await prisma.department.deleteMany({
+    where: { code: { not: 'CSE' } },
+  });
+
   // 1. Department (upserted to preserve AuditLog references)
   const department = await prisma.department.upsert({
     where: { code: 'CSE' },
