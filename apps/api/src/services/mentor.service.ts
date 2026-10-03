@@ -944,8 +944,28 @@ export async function createEscalationRequest(
 }
 
 export async function getMentorEscalationRequests(user: AuthUser) {
+  if (user.role === Role.ADMIN) {
+    return prisma.escalationCase.findMany({
+      include: {
+        student: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  const assigned = await prisma.mentorAssignment.findMany({
+    where: { mentorId: user.id, active: true },
+    select: { studentId: true },
+  });
+  const menteeIds = assigned.map((a) => a.studentId);
+
   return prisma.escalationCase.findMany({
-    where: { createdById: user.id },
+    where: {
+      OR: [
+        { createdById: user.id },
+        { studentId: { in: menteeIds } },
+      ],
+    },
     include: {
       student: { select: { id: true, name: true, email: true } },
     },

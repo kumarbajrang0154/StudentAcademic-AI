@@ -1,10 +1,13 @@
 import { prisma, AttendanceStatus, RiskCategory } from "@student-academic-ai/database";
 import {
   attendancePercent,
+  safeBunks,
   courseMastery,
   academicMetricsToRiskInputs,
   riskScore,
   negativeVelocityWarning,
+  failRisk,
+  attendanceWarningLevel,
 } from "@student-academic-ai/core";
 import { ensureEscalationCase } from "./escalation.service.js";
 
@@ -17,6 +20,44 @@ export interface RecomputeEnrollmentResult {
   submissionDeficit: number;
   riskScore: number;
   riskCategory: RiskCategory;
+  failRisk: string;
+  weakSubjectFlag: boolean;
+  attendanceWarningLevel: string;
+  safeBunks: number;
+}
+
+export interface EnrollmentDerivedMetrics {
+  failRisk: string;
+  failRiskReasons: string[];
+  projectedFinal: number;
+  weakSubjectFlag: boolean;
+  attendanceWarningLevel: string;
+}
+
+export function computeEnrollmentDerivedMetrics(inputs: {
+  attendanceRate: number;
+  masteryScore: number;
+  velocity: number;
+  riskCategory: RiskCategory;
+  safeBunksCount: number;
+}): EnrollmentDerivedMetrics {
+  const fr = failRisk({
+    mastery: inputs.masteryScore,
+    velocity: inputs.velocity,
+    attendance: inputs.attendanceRate,
+    riskCategory: inputs.riskCategory,
+  });
+
+  const weakSubjectFlag = inputs.masteryScore < 50 || fr.label !== "ON_TRACK";
+  const warnLevel = attendanceWarningLevel(inputs.attendanceRate, inputs.safeBunksCount);
+
+  return {
+    failRisk: fr.label,
+    failRiskReasons: fr.reasons,
+    projectedFinal: fr.projectedFinal,
+    weakSubjectFlag,
+    attendanceWarningLevel: warnLevel,
+  };
 }
 
 /**
@@ -34,9 +75,10 @@ export async function recomputeEnrollment(
 ): Promise<RecomputeEnrollmentResult> {
   const existingEnrollment = await prisma.courseEnrollment.findFirst({
     where: { studentId, courseId },
-    select: { riskCategory: true },
+    select: { riskCategory: true, attendanceWarningLevel: true },
   });
   const previousRisk = existingEnrollment?.riskCategory;
+  const previousWarningLevel = existingEnrollment?.attendanceWarningLevel ?? "NONE";
 
   // 1. Attendance Records for this student in this course
   const attendanceRecords = await prisma.attendanceRecord.findMany({
@@ -71,6 +113,7 @@ export async function recomputeEnrollment(
     onDutyCount,
     totalSessions,
   );
+  const safeBunksCount = safeBunks(presentCount, onDutyCount, totalSessions);
 
   // 2. Assessments and student scores for this course
   const assessments = await prisma.assessment.findMany({
@@ -154,6 +197,14 @@ export async function recomputeEnrollment(
   }
 
   // 6. Persist on CourseEnrollment
+  const derived = computeEnrollmentDerivedMetrics({
+    attendanceRate,
+    masteryScore,
+    velocity,
+    riskCategory: category,
+    safeBunksCount,
+  });
+
   await prisma.courseEnrollment.updateMany({
     where: {
       studentId,
@@ -166,6 +217,9 @@ export async function recomputeEnrollment(
       submissionDeficit,
       riskScore: riskResult.score,
       riskCategory: category,
+      failRisk: derived.failRisk,
+      weakSubjectFlag: derived.weakSubjectFlag,
+      attendanceWarningLevel: derived.attendanceWarningLevel,
     },
   });
 
@@ -174,6 +228,16 @@ export async function recomputeEnrollment(
     courseId,
     previousRisk,
     category,
+    now,
+  );
+
+  await notifyAttendanceWarningIfWorsened(
+    studentId,
+    courseId,
+    previousWarningLevel,
+    derived.attendanceWarningLevel,
+    attendanceRate,
+    safeBunksCount,
     now,
   );
 
@@ -188,6 +252,10 @@ export async function recomputeEnrollment(
     submissionDeficit,
     riskScore: riskResult.score,
     riskCategory: category,
+    failRisk: derived.failRisk,
+    weakSubjectFlag: derived.weakSubjectFlag,
+    attendanceWarningLevel: derived.attendanceWarningLevel,
+    safeBunks: safeBunksCount,
   };
 }
 
@@ -228,6 +296,7 @@ export async function recomputeCourseEnrollments(
       studentId: true,
       courseId: true,
       riskCategory: true,
+      attendanceWarningLevel: true,
     },
   });
 
@@ -303,6 +372,7 @@ export async function recomputeCourseEnrollments(
 
     // Attendance
     const attendanceRate = attendancePercent(attStats.present, attStats.onDuty, attStats.total);
+    const safeBunksCount = safeBunks(attStats.present, attStats.onDuty, attStats.total);
 
     // Mastery
     const gradedComponents = assessments
@@ -351,6 +421,14 @@ export async function recomputeCourseEnrollments(
       category = RiskCategory.CRITICAL;
     }
 
+    const derived = computeEnrollmentDerivedMetrics({
+      attendanceRate,
+      masteryScore,
+      velocity,
+      riskCategory: category,
+      safeBunksCount,
+    });
+
     results.push({
       studentId: sId,
       courseId,
@@ -360,6 +438,10 @@ export async function recomputeCourseEnrollments(
       submissionDeficit,
       riskScore: riskResult.score,
       riskCategory: category,
+      failRisk: derived.failRisk,
+      weakSubjectFlag: derived.weakSubjectFlag,
+      attendanceWarningLevel: derived.attendanceWarningLevel,
+      safeBunks: safeBunksCount,
     });
 
     updatePromises.push(
@@ -372,6 +454,9 @@ export async function recomputeCourseEnrollments(
           submissionDeficit,
           riskScore: riskResult.score,
           riskCategory: category,
+          failRisk: derived.failRisk,
+          weakSubjectFlag: derived.weakSubjectFlag,
+          attendanceWarningLevel: derived.attendanceWarningLevel,
         },
       }),
     );
@@ -380,18 +465,31 @@ export async function recomputeCourseEnrollments(
   // Execute all updates in one transaction
   await prisma.$transaction(updatePromises);
 
-  for (const enr of enrollments) {
-    const res = results.find((r) => r.studentId === enr.studentId);
-    if (res) {
-      await notifyMentorIfRiskWorsenedToCritical(
-        enr.studentId,
-        courseId,
-        enr.riskCategory,
-        res.riskCategory,
-        now,
-      );
-    }
-  }
+  await Promise.all(
+    enrollments.map(async (enr) => {
+      const res = results.find((r) => r.studentId === enr.studentId);
+      if (res) {
+        await Promise.all([
+          notifyMentorIfRiskWorsenedToCritical(
+            enr.studentId,
+            courseId,
+            enr.riskCategory,
+            res.riskCategory,
+            now,
+          ),
+          notifyAttendanceWarningIfWorsened(
+            enr.studentId,
+            courseId,
+            enr.attendanceWarningLevel ?? "NONE",
+            res.attendanceWarningLevel,
+            res.attendanceRate,
+            res.safeBunks,
+            now,
+          ),
+        ]);
+      }
+    }),
+  );
 
   const distinctCriticalStudentIds = Array.from(
     new Set(
@@ -497,4 +595,132 @@ export async function notifyMentorIfRiskWorsenedToCritical(
       },
     },
   });
+}
+
+const LEVEL_RANK: Record<string, number> = {
+  NONE: 0,
+  WATCH: 1,
+  URGENT: 2,
+  BREACH: 3,
+};
+
+/**
+ * Creates an IN_APP notification for student (and mentor if URGENT/BREACH)
+ * when attendanceWarningLevel worsens. Deduped per student+course+level per 24 hours.
+ */
+export async function notifyAttendanceWarningIfWorsened(
+  studentId: string,
+  courseId: string,
+  previousLevel: string,
+  newLevel: string,
+  attendanceRate: number,
+  safeBunksCount: number,
+  now: Date = new Date(),
+): Promise<void> {
+  const prevRank = LEVEL_RANK[previousLevel] ?? 0;
+  const newRank = LEVEL_RANK[newLevel] ?? 0;
+
+  if (newRank <= prevRank || newLevel === "NONE") {
+    return;
+  }
+
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  const [student, course] = await Promise.all([
+    prisma.user.findUnique({ where: { id: studentId }, select: { name: true } }),
+    prisma.course.findUnique({ where: { id: courseId }, select: { code: true } }),
+  ]);
+
+  const courseCode = course?.code ?? "Course";
+  const plural = safeBunksCount === 1 ? "class" : "classes";
+  const studentMessage = `${courseCode} attendance is ${attendanceRate.toFixed(1)}%. You can miss only ${Math.max(0, safeBunksCount)} more ${plural} before the 75% limit.`;
+
+  // Check student dedupe
+  const recentStudentNotifications = await prisma.notification.findMany({
+    where: {
+      userId: studentId,
+      channel: "IN_APP",
+      type: "ATTENDANCE_WARNING",
+      createdAt: { gte: oneDayAgo },
+    },
+    select: { payload: true },
+  });
+
+  const studentAlreadyNotified = recentStudentNotifications.some((n) => {
+    const payload = n.payload as { courseId?: string; level?: string } | null;
+    return payload?.courseId === courseId && payload?.level === newLevel;
+  });
+
+  if (!studentAlreadyNotified) {
+    await prisma.notification.create({
+      data: {
+        userId: studentId,
+        channel: "IN_APP",
+        type: "ATTENDANCE_WARNING",
+        link: "/student/attendance",
+        status: "PENDING",
+        payload: {
+          studentId,
+          courseId,
+          courseCode,
+          level: newLevel,
+          attendanceRate,
+          safeBunks: safeBunksCount,
+          message: studentMessage,
+        },
+      },
+    });
+  }
+
+  // URGENT and BREACH also notify mentor
+  if (newLevel === "URGENT" || newLevel === "BREACH") {
+    const mentorAssignment = await prisma.mentorAssignment.findFirst({
+      where: { studentId, active: true },
+      select: { mentorId: true },
+    });
+
+    if (mentorAssignment) {
+      const recentMentorNotifications = await prisma.notification.findMany({
+        where: {
+          userId: mentorAssignment.mentorId,
+          channel: "IN_APP",
+          type: "ATTENDANCE_WARNING",
+          createdAt: { gte: oneDayAgo },
+        },
+        select: { payload: true },
+      });
+
+      const mentorAlreadyNotified = recentMentorNotifications.some((n) => {
+        const payload = n.payload as { studentId?: string; courseId?: string; level?: string } | null;
+        return (
+          payload?.studentId === studentId &&
+          payload?.courseId === courseId &&
+          payload?.level === newLevel
+        );
+      });
+
+      if (!mentorAlreadyNotified) {
+        const mentorMessage = `${student?.name ?? "Student"}'s ${courseCode} attendance is ${attendanceRate.toFixed(1)}% (${newLevel}). You can miss only ${Math.max(0, safeBunksCount)} more ${plural} before the 75% limit.`;
+        await prisma.notification.create({
+          data: {
+            userId: mentorAssignment.mentorId,
+            channel: "IN_APP",
+            type: "ATTENDANCE_WARNING",
+            link: `/mentor/mentees/${studentId}`,
+            status: "PENDING",
+            payload: {
+              studentId,
+              courseId,
+              courseCode,
+              studentName: student?.name ?? "Student",
+              level: newLevel,
+              attendanceRate,
+              safeBunks: safeBunksCount,
+              message: mentorMessage,
+            },
+          },
+        });
+      }
+    }
+  }
 }

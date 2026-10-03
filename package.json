@@ -22,7 +22,8 @@
     "smoke:student": "tsx scripts/smoke-student.ts",
     "smoke:faculty": "tsx scripts/smoke-faculty.ts",
     "smoke:mentor": "tsx scripts/smoke-mentor.ts",
-    "smoke:admin": "tsx scripts/smoke-admin.ts"
+    "smoke:admin": "tsx scripts/smoke-admin.ts",
+    "smoke:reports": "tsx scripts/smoke-reports.ts"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",

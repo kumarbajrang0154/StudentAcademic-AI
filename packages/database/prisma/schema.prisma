@@ -47,6 +47,16 @@ enum ResourceType {
   NOTES
 }
 
+enum AssessmentType {
+  CAT1
+  CAT2
+  QUIZ
+  ASSIGNMENT
+  LAB
+  FINAL
+  OTHER
+}
+
 
 // ==========================================
 // MODELS
@@ -160,10 +170,13 @@ model CourseEnrollment {
   masteryScore      Float?
   velocity          Float?
   submissionDeficit Float?
-  riskScore         Float?
-  riskCategory      RiskCategory?
+  riskScore              Float?
+  riskCategory           RiskCategory?
+  failRisk               String?       @default("ON_TRACK")
+  weakSubjectFlag        Boolean       @default(false)
+  attendanceWarningLevel String?       @default("NONE")
 
-  createdAt         DateTime      @default(now())
+  createdAt              DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
   @@unique([courseId, studentId, semester, academicYear])
@@ -211,7 +224,7 @@ model Assessment {
   courseId    String
   course      Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   title       String
-  type        String               @default("ASSIGNMENT")
+  type        AssessmentType       @default(OTHER)
   maxScore    Float                @default(100)
   weight      Float
   dueDate     DateTime?
@@ -505,3 +518,18 @@ model MentorNote {
   @@index([mentorId, studentId])
   @@index([studentId])
 }
+
+model AnalysisRun {
+  id                    String    @id @default(cuid())
+  startedAt             DateTime  @default(now())
+  finishedAt            DateTime?
+  enrollmentsProcessed  Int       @default(0)
+  newWarnings           Int       @default(0)
+  newCriticals          Int       @default(0)
+  status                String    @default("RUNNING")
+  error                 String?
+  createdAt             DateTime  @default(now())
+
+  @@index([startedAt])
+}
+

@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
     "@student-academic-ai/database",
     "@student-academic-ai/api",
   ],
-  serverExternalPackages: ["@prisma/client", "prisma"],
+  serverExternalPackages: ["@prisma/client", "prisma", "exceljs", "pdf-lib"],
   outputFileTracingIncludes: {
     "/api/**/*": [
       "./node_modules/@prisma/client/**/*",

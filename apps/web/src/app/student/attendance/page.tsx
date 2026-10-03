@@ -633,6 +633,76 @@ export default function StudentAttendancePage() {
                     </>
                   )}
                 </div>
+
+                {/* Forecast Table: 1, 3, 5, 10 Classes Missed */}
+                <div className="space-y-2 pt-2">
+                  <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider block">
+                    Attendance Forecast Matrix
+                  </span>
+                  <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-[10px] font-semibold uppercase text-slate-400">
+                          <th className="py-2.5 px-3">If you miss</th>
+                          <th className="py-2.5 px-3">Sessions (Attended / Total)</th>
+                          <th className="py-2.5 px-3 text-center">Projected %</th>
+                          <th className="py-2.5 px-3 text-center">Debarment Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60">
+                        {[1, 3, 5, 10].map((missed) => {
+                          const proj =
+                            Math.round(
+                              predictedAttendance(
+                                activeStats.P,
+                                activeStats.OD,
+                                activeStats.T,
+                                missed,
+                                false,
+                              ) * 10,
+                            ) / 10;
+                          const isDebarred = proj < 75.0;
+                          return (
+                            <tr key={missed} className="hover:bg-slate-900/40 transition">
+                              <td className="py-2.5 px-3 font-semibold text-white">
+                                {missed} {missed === 1 ? "class" : "classes"}
+                              </td>
+                              <td className="py-2.5 px-3 font-mono text-slate-400">
+                                {activeStats.P + activeStats.OD} / {activeStats.T + missed}
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-mono font-bold">
+                                <span className={isDebarred ? "text-rose-400" : "text-emerald-400"}>
+                                  {proj.toFixed(1)}%
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                                    isDebarred
+                                      ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                                      : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                  }`}
+                                >
+                                  {isDebarred ? (
+                                    <>
+                                      <XCircle className="w-3 h-3 text-rose-400" />
+                                      <span>Debarred (&lt; 75%)</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                      <span>Safe (&ge; 75%)</span>
+                                    </>
+                                  )}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
 

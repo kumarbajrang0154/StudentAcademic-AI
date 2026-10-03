@@ -133,3 +133,34 @@ export function predictedAttendance(
 
   return attendancePercent(P, OD, T + futureClasses);
 }
+
+export type AttendanceWarningLevel = "NONE" | "WATCH" | "URGENT" | "BREACH";
+
+/**
+ * Categorizes attendance warning level based on attendance percentage and safe bunks.
+ *
+ * Rules:
+ * - BREACH: percent < 75.0
+ * - URGENT: percent < 77.0 (and >= 75.0)
+ * - WATCH:  percent < 80.0 OR safeBunks <= 2
+ * - NONE:   percent >= 80.0 AND safeBunks > 2
+ *
+ * @param percent Attendance percentage (0-100)
+ * @param safeBunks Safe classes that can be missed while staying >= 75%
+ */
+export function attendanceWarningLevel(
+  percent: number,
+  safeBunks: number,
+): AttendanceWarningLevel {
+  if (percent < 75.0) {
+    return "BREACH";
+  }
+  if (percent < 77.0) {
+    return "URGENT";
+  }
+  if (percent < 80.0 || safeBunks <= 2) {
+    return "WATCH";
+  }
+  return "NONE";
+}
+

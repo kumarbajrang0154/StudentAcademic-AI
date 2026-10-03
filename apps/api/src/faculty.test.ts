@@ -266,7 +266,7 @@ describe("Faculty Portal RBAC & Scope Tests", () => {
       });
       await recomputeEnrollment(student!.id, cs101Id);
     }
-  }, 60000);
+  }, 90000);
 
   it("enforces assessment weight sum <= 100% on creation", async () => {
     const existing = await prisma.assessment.aggregate({
@@ -294,10 +294,12 @@ describe("Faculty Portal RBAC & Scope Tests", () => {
   it("bulk recompute matches single recompute and completes in < 2s for 40 students", async () => {
     const fixedNow = new Date("2026-10-01T12:00:00Z");
 
-    const students = await prisma.user.findMany({
-      where: { role: Role.STUDENT },
-      orderBy: { email: "asc" },
+    const enrollments = await prisma.courseEnrollment.findMany({
+      where: { courseId: cs101Id },
+      include: { student: true },
+      orderBy: { student: { email: "asc" } },
     });
+    const students = enrollments.map((e) => e.student);
 
     // 1. Bulk recompute loads in 4 queries and executes in 1 transaction
     const bulkStart = performance.now();

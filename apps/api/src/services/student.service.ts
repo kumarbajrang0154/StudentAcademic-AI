@@ -320,6 +320,41 @@ export async function getStudentCourseDetail(
       weight: a.weight,
     }));
 
+  // Per-type performance breakdown & CAT1 -> CAT2 trend
+  const typeMap: Record<string, { totalPct: number; count: number }> = {};
+  for (const a of assessmentBreakdown) {
+    if (a.normalizedScore !== null) {
+      const t = a.type || "OTHER";
+      if (!typeMap[t]) typeMap[t] = { totalPct: 0, count: 0 };
+      typeMap[t].totalPct += a.normalizedScore;
+      typeMap[t].count++;
+    }
+  }
+
+  const perTypeAverages: Record<string, number> = {};
+  for (const [t, d] of Object.entries(typeMap)) {
+    perTypeAverages[t] = d.count > 0 ? Math.round((d.totalPct / d.count) * 10) / 10 : 0;
+  }
+
+  const cat1Val = perTypeAverages["CAT1"] ?? null;
+  const cat2Val = perTypeAverages["CAT2"] ?? null;
+  let catDiff: number | null = null;
+  let catDirection: "UP" | "DOWN" | "STABLE" | "N/A" = "N/A";
+  if (cat1Val !== null && cat2Val !== null) {
+    catDiff = Math.round((cat2Val - cat1Val) * 10) / 10;
+    catDirection = catDiff > 0 ? "UP" : catDiff < 0 ? "DOWN" : "STABLE";
+  }
+
+  const perTypeBreakdown = {
+    averages: perTypeAverages,
+    catTrend: {
+      cat1: cat1Val,
+      cat2: cat2Val,
+      diff: catDiff,
+      direction: catDirection,
+    },
+  };
+
   return {
     course: {
       id: enrollment.course.id,
@@ -337,7 +372,11 @@ export async function getStudentCourseDetail(
       submissionDeficit: enrollment.submissionDeficit ?? 0,
       riskScore: enrollment.riskScore ?? 0,
       riskCategory: enrollment.riskCategory ?? RiskCategory.SAFE,
+      failRisk: enrollment.failRisk,
+      weakSubjectFlag: enrollment.weakSubjectFlag,
+      attendanceWarningLevel: enrollment.attendanceWarningLevel,
     },
+    perTypeBreakdown,
     assessmentBreakdown,
     scoreHistory,
   };
