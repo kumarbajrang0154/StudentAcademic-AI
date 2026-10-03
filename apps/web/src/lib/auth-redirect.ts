@@ -58,14 +58,8 @@ export function isPathAllowedForRole(path: string, userRole?: string): boolean {
     case "MENTOR":
       return path.startsWith("/mentor");
     case "HOD":
-      return path.startsWith("/faculty") || path.startsWith("/admin");
     case "ADMIN":
-      return (
-        path.startsWith("/faculty") ||
-        path.startsWith("/mentor") ||
-        path.startsWith("/admin") ||
-        path.startsWith("/student")
-      );
+      return path.startsWith("/admin");
     default:
       return false;
   }

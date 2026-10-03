@@ -37,40 +37,51 @@ interface KPI {
 }
 
 interface OverviewData {
-  departmentScope: string;
+  departmentScope?: string;
   kpis: {
-    retentionRiskIndex: KPI;
-    projectedDebarments: KPI;
-    curriculumBottlenecks: KPI;
-    interventionSuccessRate: KPI;
-    markEntryCompliance: KPI;
+    retentionRiskIndex?: KPI;
+    projectedDebarments?: KPI;
+    curriculumBottlenecks?: KPI;
+    interventionSuccessRate?: KPI;
+    markEntryCompliance?: KPI;
   };
   attendanceTrend14Days: Array<{
     date: string;
-    rate: number;
-    minimumTarget: number;
+    rate?: number;
+    minimumTarget?: number;
+    [key: string]: string | number | undefined;
   }>;
   courseRiskDistribution: Array<{
-    courseCode: string;
-    courseName: string;
-    CRITICAL: number;
-    HIGH: number;
-    MEDIUM: number;
-    LOW: number;
+    courseCode?: string;
+    course?: string;
+    courseName?: string;
+    name?: string;
+    CRITICAL?: number;
+    critical?: number;
+    HIGH?: number;
+    MEDIUM?: number;
+    moderate?: number;
+    LOW?: number;
+    safe?: number;
   }>;
   escalationsQueue: Array<{
     studentId: string;
     name: string;
     email: string;
-    department: string;
+    department?: string;
     criticalCourseCount: number;
-    riskDrivers: string[];
-    activeCase: {
-      id: string;
-      tier: number;
+    riskDrivers?: string[];
+    riskDriverTags?: string[];
+    caseStatus?: string;
+    severity?: string;
+    caseId?: string | null;
+    dispatchedAt?: string | null;
+    activeCase?: {
+      id?: string;
+      tier?: number;
       status: string;
       severity: string;
-      dispatchedAt: string | null;
+      dispatchedAt?: string | null;
     } | null;
   }>;
 }
@@ -124,11 +135,43 @@ export default function AdminDashboardPage() {
         throw new Error(`Failed to load institutional overview (${res.status})`);
       }
       const json = await res.json();
-      if (json.charts) {
-        json.attendanceTrend14Days = json.charts.attendanceTrend || [];
-        json.courseRiskDistribution = json.charts.riskDistribution || [];
-      }
-      setData(json);
+      const attendanceTrend = (json.charts?.attendanceTrend || []).map(
+        (item: Record<string, unknown>) => {
+          if (typeof item.rate === "number") return item as { date: string; rate: number; minimumTarget: number };
+          let total = 0;
+          let count = 0;
+          Object.entries(item).forEach(([k, v]) => {
+            if (k !== "date" && typeof v === "number") {
+              total += v;
+              count++;
+            }
+          });
+          return {
+            ...item,
+            date: String(item.date || ""),
+            rate: count > 0 ? Math.round(total / count) : 100,
+            minimumTarget: 75,
+          };
+        },
+      );
+
+      const courseRisk = (json.charts?.riskDistribution || []).map(
+        (c: Record<string, unknown>) => ({
+          courseCode: String(c.courseCode || c.course || "COURSE"),
+          courseName: String(c.courseName || c.name || ""),
+          LOW: typeof c.LOW === "number" ? c.LOW : typeof c.safe === "number" ? c.safe : 0,
+          MEDIUM: typeof c.MEDIUM === "number" ? c.MEDIUM : typeof c.moderate === "number" ? c.moderate : 0,
+          HIGH: typeof c.HIGH === "number" ? c.HIGH : 0,
+          CRITICAL: typeof c.CRITICAL === "number" ? c.CRITICAL : typeof c.critical === "number" ? c.critical : 0,
+        }),
+      );
+
+      setData({
+        ...json,
+        attendanceTrend14Days: attendanceTrend,
+        courseRiskDistribution: courseRisk,
+        escalationsQueue: json.escalationsQueue || [],
+      });
 
       // Fetch last analysis run
       try {
@@ -369,22 +412,22 @@ export default function AdminDashboardPage() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold text-white">
-              {kpis.retentionRiskIndex.value}%
+              {kpis.retentionRiskIndex?.value ?? 0}%
             </span>
             <span className="text-xs text-slate-400">cohort</span>
           </div>
           <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
             <span className="text-slate-400">Δ 7d:</span>
             <span className="text-slate-400 font-mono">
-              {kpis.retentionRiskIndex.deltaVs7Days !== null
+              {kpis.retentionRiskIndex?.deltaVs7Days !== null && kpis.retentionRiskIndex?.deltaVs7Days !== undefined
                 ? `${kpis.retentionRiskIndex.deltaVs7Days}%`
                 : "n/a"}
             </span>
-            <span className="text-slate-400 ml-auto font-mono">N={kpis.retentionRiskIndex.sampleSize}</span>
+            <span className="text-slate-400 ml-auto font-mono">N={kpis.retentionRiskIndex?.sampleSize ?? 0}</span>
           </div>
           {activeTooltip === "kpi-risk" && (
             <div className="absolute top-10 right-2 z-50 p-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 w-56 shadow-xl">
-              {kpis.retentionRiskIndex.definition}
+              {kpis.retentionRiskIndex?.definition || "Retention Risk Index"}
             </div>
           )}
         </div>
@@ -405,18 +448,18 @@ export default function AdminDashboardPage() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold text-rose-400">
-              {kpis.projectedDebarments.value}
+              {kpis.projectedDebarments?.value ?? 0}
             </span>
             <span className="text-xs text-slate-400">students</span>
           </div>
           <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
             <span className="text-slate-400">Below 75%:</span>
-            <span className="text-rose-400 font-semibold">{kpis.projectedDebarments.value}</span>
-            <span className="text-slate-400 ml-auto font-mono">N={kpis.projectedDebarments.sampleSize}</span>
+            <span className="text-rose-400 font-semibold">{kpis.projectedDebarments?.value ?? 0}</span>
+            <span className="text-slate-400 ml-auto font-mono">N={kpis.projectedDebarments?.sampleSize ?? 0}</span>
           </div>
           {activeTooltip === "kpi-debar" && (
             <div className="absolute top-10 right-2 z-50 p-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 w-56 shadow-xl">
-              {kpis.projectedDebarments.definition}
+              {kpis.projectedDebarments?.definition || "Projected Debarments"}
             </div>
           )}
         </div>
@@ -437,17 +480,17 @@ export default function AdminDashboardPage() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold text-amber-400">
-              {kpis.curriculumBottlenecks.value}
+              {kpis.curriculumBottlenecks?.value ?? 0}
             </span>
             <span className="text-xs text-slate-400">course units</span>
           </div>
           <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
             <span className="text-slate-400">&gt;40% fail rate</span>
-            <span className="text-slate-400 ml-auto font-mono">N={kpis.curriculumBottlenecks.sampleSize}</span>
+            <span className="text-slate-400 ml-auto font-mono">N={kpis.curriculumBottlenecks?.sampleSize ?? 0}</span>
           </div>
           {activeTooltip === "kpi-bottle" && (
             <div className="absolute top-10 right-2 z-50 p-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 w-56 shadow-xl">
-              {kpis.curriculumBottlenecks.definition}
+              {kpis.curriculumBottlenecks?.definition || "Curriculum Bottlenecks"}
             </div>
           )}
         </div>
@@ -468,17 +511,19 @@ export default function AdminDashboardPage() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold text-emerald-400">
-              {kpis.interventionSuccessRate.value}%
+              {kpis.interventionSuccessRate?.value !== null && kpis.interventionSuccessRate?.value !== undefined
+                ? `${kpis.interventionSuccessRate.value}%`
+                : "n/a"}
             </span>
             <span className="text-xs text-slate-400">recovery</span>
           </div>
           <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
             <span className="text-slate-400">Target: &gt;70%</span>
-            <span className="text-slate-400 ml-auto font-mono">N={kpis.interventionSuccessRate.sampleSize}</span>
+            <span className="text-slate-400 ml-auto font-mono">N={kpis.interventionSuccessRate?.sampleSize ?? 0}</span>
           </div>
           {activeTooltip === "kpi-success" && (
             <div className="absolute top-10 right-2 z-50 p-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 w-56 shadow-xl">
-              {kpis.interventionSuccessRate.definition}
+              {kpis.interventionSuccessRate?.definition || "Intervention Success Rate"}
             </div>
           )}
         </div>
@@ -499,17 +544,19 @@ export default function AdminDashboardPage() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold text-cyan-400">
-              {kpis.markEntryCompliance.value}%
+              {kpis.markEntryCompliance?.value !== null && kpis.markEntryCompliance?.value !== undefined
+                ? `${kpis.markEntryCompliance.value}%`
+                : "n/a"}
             </span>
             <span className="text-xs text-slate-400">submitted</span>
           </div>
           <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
             <span className="text-slate-400">Faculty timely</span>
-            <span className="text-slate-400 ml-auto font-mono">N={kpis.markEntryCompliance.sampleSize}</span>
+            <span className="text-slate-400 ml-auto font-mono">N={kpis.markEntryCompliance?.sampleSize ?? 0}</span>
           </div>
           {activeTooltip === "kpi-mark" && (
             <div className="absolute top-10 right-2 z-50 p-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 w-56 shadow-xl">
-              {kpis.markEntryCompliance.definition}
+              {kpis.markEntryCompliance?.definition || "Mark Entry Compliance"}
             </div>
           )}
         </div>
@@ -663,7 +710,14 @@ export default function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {data.escalationsQueue.map((item) => {
+                {(data.escalationsQueue || []).map((item) => {
+                  const drivers = item.riskDrivers || item.riskDriverTags || [];
+                  const activeCase = item.activeCase || (item.caseStatus && item.caseStatus !== "NONE" ? {
+                    id: item.caseId || item.studentId,
+                    status: item.caseStatus,
+                    severity: item.severity || "STANDARD",
+                  } : null);
+
                   return (
                     <tr key={item.studentId} className="hover:bg-slate-800/40 transition">
                       <td className="py-3 px-4">
@@ -677,21 +731,25 @@ export default function AdminDashboardPage() {
                       </td>
                       <td className="py-3 px-3">
                         <div className="flex flex-wrap gap-1">
-                          {item.riskDrivers.map((driver, idx) => (
-                            <span
-                              key={idx}
-                              className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300"
-                            >
-                              {driver}
-                            </span>
-                          ))}
+                          {drivers.length > 0 ? (
+                            drivers.map((driver, idx) => (
+                              <span
+                                key={idx}
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300"
+                              >
+                                {driver}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] text-slate-500 italic">Critical across courses</span>
+                          )}
                         </div>
                       </td>
                       <td className="py-3 px-3">
-                        {item.activeCase ? (
+                        {activeCase ? (
                           <div className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300">
                             <Clock className="w-3 h-3" />
-                            {item.activeCase.status} ({item.activeCase.severity})
+                            {activeCase.status} ({activeCase.severity})
                           </div>
                         ) : (
                           <span className="text-[11px] text-slate-400 italic">Eligible for Tier-1</span>
@@ -772,7 +830,7 @@ export default function AdminDashboardPage() {
                     required
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
                   >
-                    {data.escalationsQueue.map((s) => (
+                    {(data.escalationsQueue || []).map((s) => (
                       <option key={s.studentId} value={s.studentId}>
                         {s.name} ({s.email}) — {s.criticalCourseCount} Critical Courses
                       </option>

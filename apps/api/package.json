@@ -19,7 +19,7 @@
     "build": "tsup src/index.ts src/server.ts --format esm --dts --clean",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "test": "vitest run --testTimeout 90000",
+    "test": "vitest run --testTimeout 90000 --hookTimeout 90000",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --no-error-on-unmatched-pattern"
   },

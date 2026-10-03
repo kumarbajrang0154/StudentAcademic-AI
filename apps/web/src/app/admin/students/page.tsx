@@ -168,7 +168,13 @@ export default function AdminStudentsPage() {
                       <div className="text-[11px] text-slate-400 font-mono">{st.email}</div>
                     </td>
                     <td className="py-3 px-3">
-                      <span className="font-medium text-slate-300">{st.department}</span>
+                      <span className="font-medium text-slate-300">
+                        {typeof st.department === "object"
+                          ? ((st.department as { code?: string; name?: string })?.code ||
+                             (st.department as { code?: string; name?: string })?.name ||
+                             "CSE")
+                          : st.department || "CSE"}
+                      </span>
                     </td>
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-1.5">

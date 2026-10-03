@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 interface SettingsData {
-  rbacMatrix: Record<string, string[]>;
+  rbacMatrix: Record<string, Record<string, string> | string[]>;
   weights: {
     attendance: number;
     mastery: number;
@@ -62,8 +62,54 @@ export default function AdminSettingsPage() {
       const settingsJson = await settingsRes.json();
       const auditJson = await auditRes.json();
 
-      setSettings(settingsJson);
-      setAuditLogs(auditJson.logs || []);
+      setSettings({
+        rbacMatrix: settingsJson.rbacMatrix || {},
+        weights: settingsJson.weights || {
+          attendance: settingsJson.riskWeights?.attendance ?? 0.35,
+          mastery: settingsJson.riskWeights?.mastery ?? 0.45,
+          velocity: settingsJson.riskWeights?.velocity ?? 0.20,
+        },
+        thresholds: {
+          criticalRiskCutoff: settingsJson.thresholds?.criticalRiskCutoff ?? 65,
+          highRiskCutoff: settingsJson.thresholds?.highRiskCutoff ?? 40,
+          attendanceDebarmentLimit:
+            settingsJson.thresholds?.attendanceDebarmentLimit ??
+            settingsJson.thresholds?.mandatoryAttendance ??
+            75,
+          bottleneckFailRateLimit:
+            settingsJson.thresholds?.bottleneckFailRateLimit ?? 0.4,
+        },
+      });
+      const rawLogs = (auditJson.logs || auditJson.auditLogs || []) as Array<
+        Record<string, unknown>
+      >;
+      const normalizedLogs = rawLogs.map((l) => ({
+        id: String(l.id || ""),
+        userId: String(l.userId || l.modifiedById || ""),
+        userName: String(
+          l.userName ||
+            (l.modifiedBy as { name?: string } | undefined)?.name ||
+            "System",
+        ),
+        userEmail: String(
+          l.userEmail ||
+            (l.modifiedBy as { email?: string } | undefined)?.email ||
+            "system@university.edu",
+        ),
+        userRole: String(
+          l.userRole ||
+            (l.modifiedBy as { role?: string } | undefined)?.role ||
+            "SYSTEM",
+        ),
+        action: String(
+          l.action || l.justification || `${String(l.entity || "Entity")} modified`,
+        ),
+        entity: String(l.entity || "System"),
+        entityId: String(l.entityId || ""),
+        justification: String(l.justification || ""),
+        createdAt: String(l.createdAt || new Date().toISOString()),
+      }));
+      setAuditLogs(normalizedLogs);
     } catch (err: unknown) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Failed to load system settings");
@@ -179,14 +225,26 @@ export default function AdminSettingsPage() {
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="flex flex-wrap gap-1.5">
-                        {permissions.map((p) => (
-                          <span
-                            key={p}
-                            className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-indigo-300 border border-slate-700 font-mono"
-                          >
-                            {p}
-                          </span>
-                        ))}
+                        {Array.isArray(permissions)
+                          ? permissions.map((p) => (
+                              <span
+                                key={p}
+                                className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-indigo-300 border border-slate-700 font-mono"
+                              >
+                                {p}
+                              </span>
+                            ))
+                          : typeof permissions === "object" && permissions !== null
+                          ? Object.entries(permissions).map(([perm, scope]) => (
+                              <span
+                                key={perm}
+                                className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-indigo-300 border border-slate-700 font-mono"
+                              >
+                                {perm}
+                                {scope && scope !== "ALL" ? ` (${scope})` : ""}
+                              </span>
+                            ))
+                          : null}
                       </div>
                     </td>
                   </tr>

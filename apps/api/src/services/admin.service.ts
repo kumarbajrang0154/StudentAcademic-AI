@@ -339,34 +339,65 @@ export async function getAdminOverview(user: AuthUser, queryDeptId?: string) {
 
   const attendanceTrend = Array.from(dateMap.entries()).map(([date, courseStats]) => {
     const row: Record<string, string | number> = { date };
+    let dayPresent = 0;
+    let dayTotal = 0;
     for (const [code, stat] of Object.entries(courseStats)) {
       row[code] = stat.total > 0 ? Math.round((stat.present / stat.total) * 100) : 100;
+      dayPresent += stat.present;
+      dayTotal += stat.total;
     }
+    row.rate = dayTotal > 0 ? Math.round((dayPresent / dayTotal) * 100) : 100;
+    row.minimumTarget = 75;
     return row;
   });
 
   // Chart Data B: Risk Distribution per Course
   const courseRiskMap = new Map<
     string,
-    { course: string; name: string; safe: number; moderate: number; critical: number }
+    {
+      course: string;
+      courseCode: string;
+      name: string;
+      courseName: string;
+      safe: number;
+      moderate: number;
+      critical: number;
+      LOW: number;
+      MEDIUM: number;
+      HIGH: number;
+      CRITICAL: number;
+    }
   >();
 
   courses.forEach((c) => {
     courseRiskMap.set(c.id, {
       course: c.code,
+      courseCode: c.code,
       name: c.name,
+      courseName: c.name,
       safe: 0,
       moderate: 0,
       critical: 0,
+      LOW: 0,
+      MEDIUM: 0,
+      HIGH: 0,
+      CRITICAL: 0,
     });
   });
 
   enrollments.forEach((enr) => {
     const cur = courseRiskMap.get(enr.courseId);
     if (!cur) return;
-    if (enr.riskCategory === RiskCategory.SAFE) cur.safe++;
-    else if (enr.riskCategory === RiskCategory.MODERATE) cur.moderate++;
-    else if (enr.riskCategory === RiskCategory.CRITICAL) cur.critical++;
+    if (enr.riskCategory === RiskCategory.SAFE) {
+      cur.safe++;
+      cur.LOW++;
+    } else if (enr.riskCategory === RiskCategory.MODERATE) {
+      cur.moderate++;
+      cur.MEDIUM++;
+    } else if (enr.riskCategory === RiskCategory.CRITICAL) {
+      cur.critical++;
+      cur.CRITICAL++;
+    }
   });
 
   const riskDistribution = Array.from(courseRiskMap.values());
@@ -436,18 +467,30 @@ export async function getAdminOverview(user: AuthUser, queryDeptId?: string) {
     const mentorName =
       student.mentorAssignmentsAsStudent[0]?.mentor?.name || "Unassigned";
 
+    const activeCase = ec
+      ? {
+          id: ec.id,
+          tier: 1,
+          status: ec.status,
+          severity: ec.severity,
+          dispatchedAt: ec.dispatchedAt ? ec.dispatchedAt.toISOString() : null,
+        }
+      : null;
+
     escalationTableRows.push({
       studentId: sId,
       name: student.name,
       email: student.email,
       criticalCourseCount: enrs.length,
       riskDriverTags,
+      riskDrivers: riskDriverTags,
       velocityBand: vBand,
       mentorName,
       caseId: ec?.id || null,
       caseStatus: ec?.status || "NONE",
       severity: ec?.severity || "STANDARD",
       dispatchedAt: ec?.dispatchedAt || null,
+      activeCase,
     });
   }
 
@@ -714,15 +757,43 @@ export async function getAdminStudents(
   ]);
 
   return {
-    students: students.map((s) => ({
-      id: s.id,
-      name: s.name,
-      email: s.email,
-      department: s.department,
-      enrollments: s.enrollments,
-      guardianConsent: s.guardianContacts[0]?.consentGiven ?? false,
-      mentor: s.mentorAssignmentsAsStudent[0]?.mentor || null,
-    })),
+    students: students.map((s) => {
+      const enrs = s.enrollments || [];
+      const totalAtt = enrs.reduce(
+        (acc, e) => acc + (e.attendanceRate !== null ? e.attendanceRate : 100),
+        0,
+      );
+      const avgAtt = enrs.length > 0 ? Math.round(totalAtt / enrs.length) : 100;
+      const totalMastery = enrs.reduce(
+        (acc, e) => acc + (e.masteryScore !== null ? e.masteryScore : 100),
+        0,
+      );
+      const avgMastery =
+        enrs.length > 0 ? Math.round(totalMastery / enrs.length) : 100;
+
+      let topRisk: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" = "LOW";
+      if (enrs.some((e) => e.riskCategory === RiskCategory.CRITICAL)) {
+        topRisk = "CRITICAL";
+      } else if (enrs.some((e) => e.riskCategory === RiskCategory.MODERATE)) {
+        topRisk = "MEDIUM";
+      }
+
+      return {
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        department: s.department?.code || s.department?.name || "CSE",
+        departmentObj: s.department,
+        attendanceRate: avgAtt,
+        masteryScore: avgMastery,
+        riskCategory: topRisk,
+        activeEscalation: null,
+        coursesCount: enrs.length,
+        enrollments: s.enrollments,
+        guardianConsent: s.guardianContacts[0]?.consentGiven ?? false,
+        mentor: s.mentorAssignmentsAsStudent[0]?.mentor || null,
+      };
+    }),
     pagination: {
       page,
       limit: safeLimit,
@@ -856,17 +927,24 @@ export async function getAdminCourses(user: AuthUser) {
       code: course.code,
       name: course.name,
       credits: course.credits,
-      department: course.department,
+      department: course.department?.code || course.department?.name || "CSE",
+      departmentObj: course.department,
       faculty,
+      facultyName: faculty?.name || "Unassigned",
       enrolledCount: totalEnrolled,
+      enrolledStudentsCount: totalEnrolled,
       riskDistribution: {
         safe: safeCount,
         moderate: modCount,
         critical: critCount,
       },
       avgAttendance,
+      averageAttendance: avgAttendance,
+      averageMastery: 85,
       bottleneckUnitsCount: bottleneckCount,
+      bottlenecksCount: bottleneckCount,
       markEntryCompliance,
+      complianceRate: markEntryCompliance ?? 100,
     };
   });
 }
@@ -1091,8 +1169,24 @@ export async function getAdminAuditLogs(
     };
   });
 
+  const mappedLogs = sanitizedRows.map((r) => ({
+    id: r.id,
+    userId: r.modifiedById || "",
+    userName: r.modifiedBy?.name || "System",
+    userEmail: r.modifiedBy?.email || "system@university.edu",
+    userRole: r.modifiedBy?.role || "SYSTEM",
+    action: r.justification || `${r.entity} modified`,
+    entity: r.entity,
+    entityId: r.entityId,
+    justification: r.justification || "",
+    createdAt: r.createdAt.toISOString(),
+    previousValue: r.previousValue,
+    newValue: r.newValue,
+  }));
+
   return {
     auditLogs: sanitizedRows,
+    logs: mappedLogs,
     pagination: {
       page,
       limit: safeLimit,
@@ -1110,8 +1204,17 @@ export async function getAdminSettings() {
   return {
     rbacMatrix: PERMISSION_MATRIX,
     riskWeights: DEFAULT_RISK_WEIGHTS,
+    weights: {
+      attendance: DEFAULT_RISK_WEIGHTS.attendance,
+      mastery: DEFAULT_RISK_WEIGHTS.mastery,
+      velocity: DEFAULT_RISK_WEIGHTS.velocity,
+    },
     thresholds: {
       mandatoryAttendance: 75,
+      attendanceDebarmentLimit: 75,
+      criticalRiskCutoff: 65,
+      highRiskCutoff: 40,
+      bottleneckFailRateLimit: 0.4,
       riskBands: {
         SAFE: "0 - 39",
         MODERATE: "40 - 64",

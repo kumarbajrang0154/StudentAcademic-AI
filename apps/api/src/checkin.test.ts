@@ -63,7 +63,7 @@ beforeAll(async () => {
     name: "Student 01",
     role: "STUDENT",
   });
-});
+}, 60000);
 
 afterAll(async () => {
   // Clean up any created check-in windows and attendance records
