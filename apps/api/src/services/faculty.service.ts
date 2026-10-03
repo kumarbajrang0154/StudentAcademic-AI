@@ -1,4 +1,4 @@
-import { prisma, Role, RiskCategory, AttendanceStatus } from "@student-academic-ai/database";
+import { prisma, Role, RiskCategory, AttendanceStatus, AssessmentType } from "@student-academic-ai/database";
 import { AuthUser, canAccessCourse } from "../lib/rbac.js";
 import {
   parseVoiceAttendance,
@@ -337,7 +337,7 @@ export async function createAssessment(
     title: string;
     maxScore: number;
     weight: number;
-    type?: string;
+    type?: AssessmentType;
     dueDate?: Date;
   },
   user: AuthUser,
@@ -384,7 +384,7 @@ export async function createAssessment(
       title: data.title,
       maxScore: data.maxScore,
       weight: data.weight,
-      type: data.type ?? "ASSIGNMENT",
+      type: data.type ?? AssessmentType.ASSIGNMENT,
       dueDate: data.dueDate,
     },
   });

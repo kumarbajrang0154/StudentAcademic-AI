@@ -103,6 +103,18 @@ export default function AdminDashboardPage() {
   const [jobStatus, setJobStatus] = useState<JobStatusData | null>(null);
   const [dispatchSuccess, setDispatchSuccess] = useState<boolean>(false);
 
+  // Continuous Analysis State
+  const [lastRun, setLastRun] = useState<{
+    id: string;
+    startedAt: string;
+    finishedAt?: string;
+    status: string;
+    enrollmentsProcessed: number;
+    newWarnings: number;
+    newCriticals: number;
+  } | null>(null);
+  const [runningAnalysis, setRunningAnalysis] = useState(false);
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -117,11 +129,43 @@ export default function AdminDashboardPage() {
         json.courseRiskDistribution = json.charts.riskDistribution || [];
       }
       setData(json);
+
+      // Fetch last analysis run
+      try {
+        const runRes = await apiFetch("/api/v1/admin/analysis/runs");
+        if (runRes.ok) {
+          const runJson = await runRes.json();
+          if (runJson.runs && runJson.runs.length > 0) {
+            setLastRun(runJson.runs[0]);
+          }
+        }
+      } catch {
+        // Non-critical
+      }
     } catch (err: unknown) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Failed to load dashboard data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRunAnalysisNow = async () => {
+    setRunningAnalysis(true);
+    try {
+      const res = await apiFetch("/api/v1/admin/analysis/run", { method: "POST" });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || "Continuous analysis failed");
+      }
+      const json = await res.json();
+      setLastRun(json.result);
+      alert(`Continuous Analysis Completed!\n• Enrollments Processed: ${json.result.enrollmentsProcessed}\n• New Attendance Warnings: ${json.result.newWarnings}\n• New Critical Alerts: ${json.result.newCriticals}`);
+      await fetchData();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Analysis run failed");
+    } finally {
+      setRunningAnalysis(false);
     }
   };
 
@@ -255,11 +299,42 @@ export default function AdminDashboardPage() {
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-400">
-            Real-time retention telemetry, compliance tracking, and automated multi-channel escalation dispatch.
+            Analysis runs after every attendance/marks save and daily. Automated retention telemetry, compliance tracking, and escalation dispatch.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {lastRun && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-300">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  lastRun.status === "COMPLETED" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
+                }`}
+              />
+              <span>
+                Last analysis run:{" "}
+                <strong className="text-white">
+                  {new Date(lastRun.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </strong>{" "}
+                <span className="text-slate-500">({lastRun.status})</span> • {lastRun.enrollmentsProcessed} processed
+              </span>
+            </div>
+          )}
+
+          <button
+            onClick={handleRunAnalysisNow}
+            disabled={runningAnalysis}
+            className="px-3.5 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition disabled:opacity-50"
+            title="Run continuous analysis across all courses now"
+          >
+            {runningAnalysis ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
+            Run Analysis Now
+          </button>
+
           <button
             onClick={fetchData}
             className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-xl text-xs flex items-center gap-2 transition"

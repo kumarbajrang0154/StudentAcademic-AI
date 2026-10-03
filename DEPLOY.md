@@ -66,13 +66,15 @@ Set the following variables in **Vercel Project Settings $\rightarrow$ Environme
 | `DATABASE_URL` | **Yes** | Neon connection-pooled URL (`sslmode=require&pgbouncer=true&connect_timeout=15`). |
 | `DIRECT_URL` | **Yes** | Neon unpooled direct URL (`sslmode=require&connect_timeout=15`) for Prisma migrations and schema operations. |
 | `JWT_SECRET` | **Yes** | Cryptographically secure 32+ character random secret used for Fastify JWT token generation and verification. Always generate a fresh secret for production (`openssl rand -hex 32`) and rotate periodically. |
+| `CRON_SECRET` | **Yes** | Cryptographic bearer token secret used to authenticate scheduled Vercel Cron requests to `/api/v1/internal/analysis/run`. |
 | `DEMO_MODE` | **Yes** | Set to `"true"` to enable quick demo role logins on `/login`. **For any non-demo or production deployment, set `DEMO_MODE=false`** (this removes demo buttons and demo credentials from the UI, and returns `404 Not Found` for any direct `POST /api/v1/auth/demo-login` requests). |
 | `FAIL_PROVIDER` | No | Optional failure injection flag (`none` by default). |
 | `NODE_ENV` | Auto | Automatically managed by Vercel (`production` during live deployments). |
 
 > [!NOTE]
 > All credentials must remain confidential. Never print or commit real connection strings or secrets to source control.
-> When deploying outside of a demo environment, always set `DEMO_MODE=false` and rotate `JWT_SECRET`.
+> When deploying outside of a demo environment, always set `DEMO_MODE=false` and rotate `JWT_SECRET` and `CRON_SECRET`.
+
 
 ---
 
@@ -125,3 +127,27 @@ npm run db:verify
 | **`404 Demo login is disabled`** | `DEMO_MODE` environment variable on Vercel is unset, `false`, or not equal to `"true"`. | In demo environments, set `DEMO_MODE=true` in Vercel Project Settings $\rightarrow$ Environment Variables and redeploy. In non-demo environments, this 404 is the intended hardened behavior. |
 | **`429 Too Many Requests` on `/login`** | Rate limiting exceeded (10 attempts per 15 minutes per IP+email). | Wait for the 15-minute cooldown period or test with alternate credentials/IP. |
 | **`500 Internal Server Error` on API routes** | Database connection failure or unhandled exception in Fastify route handler. | Check Vercel Function logs under the **Logs** tab. Fastify inject errors will display route execution details without leaking secrets. |
+
+---
+
+## 6. Vercel Cron Jobs & Continuous Analysis
+
+The continuous analysis engine runs bulk calculations across all course enrollments, triggers deadline alerts, and records analysis telemetry.
+
+### Configuration
+- **Cron Configuration File**: [`apps/web/vercel.json`](file:///c:/Users/rajan/OneDrive/Desktop/StudentAcademic-AI/apps/web/vercel.json) (and mirrored in root [`vercel.json`](file:///c:/Users/rajan/OneDrive/Desktop/StudentAcademic-AI/vercel.json)).
+- **Schedule**: `0 0 * * *` (Daily at 00:00 UTC).
+- **Target Endpoint**: `/api/v1/internal/analysis/run`.
+
+### Vercel Hobby Plan Limits
+- **Job Limit**: Vercel Hobby accounts support a maximum of **1 cron job**.
+- **Execution Frequency**: The maximum frequency allowed on the Hobby plan is **once per day** (every 24 hours).
+- **Timeout**: Serverless execution timeout is capped at **30 seconds** (Node.js runtime).
+- **Optimization**: Continuous analysis uses chunked bulk queries with in-memory core calculations and completes in **< 5 seconds** on seed data.
+
+### Authentication
+- Set `CRON_SECRET` in your Vercel Project Environment Variables.
+- Vercel automatically sends `Authorization: Bearer <CRON_SECRET>` when invoking configured cron endpoints.
+- The endpoint performs a constant-time comparison (`crypto.timingSafeEqual`) to reject unauthorized invocations with `401 Unauthorized`.
+- Administrative users (`ADMIN` and `HOD`) can also trigger the analysis on demand from the admin dashboard.
+

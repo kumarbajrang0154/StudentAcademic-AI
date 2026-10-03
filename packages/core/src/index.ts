@@ -3,7 +3,17 @@ export {
   safeBunks,
   classesToRecover,
   predictedAttendance,
+  attendanceWarningLevel,
+  type AttendanceWarningLevel,
 } from "./attendance.js";
+
+export {
+  failRisk,
+  PASS_MARK,
+  type FailRiskLabel,
+  type FailRiskInputs,
+  type FailRiskResult,
+} from "./fail-risk.js";
 
 export { courseMastery, type CourseMasteryComponent } from "./mastery.js";
 
@@ -55,3 +65,19 @@ export {
   type SlotResult,
   type FindSlotResponse,
 } from "./slot.js";
+
+export {
+  coScore,
+  coAttainmentLevel,
+  COAttainment,
+  poAttainment,
+  programPOAttainment,
+  CO_TARGET,
+  ATTAINMENT_LEVEL_3_THRESHOLD,
+  ATTAINMENT_LEVEL_2_THRESHOLD,
+  ATTAINMENT_LEVEL_1_THRESHOLD,
+  type QuestionScoreItem,
+  type COAttainmentResult,
+  type CoPoWeightItem,
+} from "./accreditation.js";
+

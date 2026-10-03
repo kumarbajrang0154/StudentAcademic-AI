@@ -1,9 +1,10 @@
 import { prisma } from "@student-academic-ai/database";
+import { AssessmentType } from "@prisma/client";
 
 export interface CreateAssessmentInput {
   courseId: string;
   title: string;
-  type?: string;
+  type?: AssessmentType;
   maxScore: number;
   weight: number;
   dueDate?: Date;
@@ -57,7 +58,7 @@ export class AssessmentService {
       data: {
         courseId: input.courseId,
         title: input.title,
-        type: input.type ?? "ASSIGNMENT",
+        type: input.type ?? AssessmentType.ASSIGNMENT,
         maxScore: input.maxScore,
         weight: input.weight,
         dueDate: input.dueDate,

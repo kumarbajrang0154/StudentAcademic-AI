@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard,
   Mic,
+  FileSpreadsheet,
   LogOut,
   GraduationCap,
   Loader2,
@@ -61,6 +62,11 @@ export function FacultyShell({ children }: FacultyShellProps) {
       label: "Voice Entry (SCR-03)",
       icon: Mic,
       badge: "AI Live",
+    },
+    {
+      href: "/faculty/reports",
+      label: "Course Reports",
+      icon: FileSpreadsheet,
     },
   ];
 

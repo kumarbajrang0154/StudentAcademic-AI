@@ -81,6 +81,18 @@ interface CourseDetailResponse {
     submissionDeficit: number;
     riskScore: number;
     riskCategory: RiskLevel;
+    failRisk?: "LIKELY_TO_FAIL" | "AT_RISK" | "ON_TRACK" | null;
+    weakSubjectFlag?: boolean;
+    attendanceWarningLevel?: string;
+  };
+  perTypeBreakdown?: {
+    averages: Record<string, number>;
+    catTrend: {
+      cat1: number | null;
+      cat2: number | null;
+      diff: number | null;
+      direction: "UP" | "DOWN" | "STABLE" | "N/A";
+    };
   };
   assessmentBreakdown: AssessmentItem[];
   scoreHistory: ScoreHistoryPoint[];
@@ -362,6 +374,79 @@ function StudentSubjectsContent() {
                         </p>
                       </div>
                     </div>
+
+                    {/* Fail Risk (rule-based estimate) indicator */}
+                    {courseDetail.metrics.failRisk && (
+                      <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                            Fail risk (rule-based estimate)
+                          </span>
+                          <p className="text-xs font-semibold text-white mt-0.5">
+                            Status:{" "}
+                            <span
+                              className={`font-bold ${
+                                courseDetail.metrics.failRisk === "LIKELY_TO_FAIL"
+                                  ? "text-rose-400"
+                                  : courseDetail.metrics.failRisk === "AT_RISK"
+                                    ? "text-amber-400"
+                                    : "text-emerald-400"
+                              }`}
+                            >
+                              {courseDetail.metrics.failRisk.replace(/_/g, " ")}
+                            </span>
+                          </p>
+                        </div>
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border ${
+                            courseDetail.metrics.failRisk === "LIKELY_TO_FAIL"
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                              : courseDetail.metrics.failRisk === "AT_RISK"
+                                ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                          }`}
+                        >
+                          {courseDetail.metrics.failRisk}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Per-type Performance Breakdown & CAT Trend */}
+                    {courseDetail.perTypeBreakdown && Object.keys(courseDetail.perTypeBreakdown.averages).length > 0 && (
+                      <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+                            Assessment Type Breakdown
+                          </span>
+                          {courseDetail.perTypeBreakdown.catTrend.diff !== null && (
+                            <span
+                              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                                courseDetail.perTypeBreakdown.catTrend.direction === "UP"
+                                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                  : courseDetail.perTypeBreakdown.catTrend.direction === "DOWN"
+                                    ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                                    : "bg-slate-800 text-slate-300 border-slate-700"
+                              }`}
+                            >
+                              CAT1 → CAT2: {courseDetail.perTypeBreakdown.catTrend.diff > 0 ? "+" : ""}
+                              {courseDetail.perTypeBreakdown.catTrend.diff}% (
+                              {courseDetail.perTypeBreakdown.catTrend.direction})
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {Object.entries(courseDetail.perTypeBreakdown.averages).map(([type, avg]) => (
+                            <div
+                              key={type}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between"
+                            >
+                              <span className="text-[10px] font-mono text-indigo-300 uppercase">{type}</span>
+                              <span className="text-xs font-mono font-bold text-white">{avg}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Why am I at risk action if Amber/Red */}
                     {(courseDetail.metrics.riskCategory === "CRITICAL" ||

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -65,7 +65,7 @@ export default function GradebookPage() {
   const [assessmentTitle, setAssessmentTitle] = useState("");
   const [assessmentMaxScore, setAssessmentMaxScore] = useState<number>(100);
   const [assessmentWeight, setAssessmentWeight] = useState<number>(15);
-  const [assessmentType, setAssessmentType] = useState("ASSIGNMENT");
+  const [assessmentType, setAssessmentType] = useState("QUIZ");
   const [assessmentDueDate, setAssessmentDueDate] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -91,6 +91,28 @@ export default function GradebookPage() {
 
   // Calculate total existing weight
   const currentTotalWeight = gradebook?.assessments.reduce((acc, a) => acc + a.weight, 0) || 0;
+
+  // Class average by assessment type
+  const perTypeAverages = useMemo(() => {
+    if (!gradebook) return {};
+    const typeMap: Record<string, { totalPct: number; count: number }> = {};
+    for (const a of gradebook.assessments) {
+      const type = a.type || "OTHER";
+      if (!typeMap[type]) typeMap[type] = { totalPct: 0, count: 0 };
+      for (const s of gradebook.students) {
+        const sc = s.scores[a.id]?.score;
+        if (sc !== null && sc !== undefined && a.maxScore > 0) {
+          typeMap[type].totalPct += (sc / a.maxScore) * 100;
+          typeMap[type].count++;
+        }
+      }
+    }
+    const result: Record<string, number> = {};
+    for (const [type, data] of Object.entries(typeMap)) {
+      result[type] = data.count > 0 ? Math.round((data.totalPct / data.count) * 10) / 10 : 0;
+    }
+    return result;
+  }, [gradebook]);
 
   // Open Score edit modal
   const handleOpenScoreModal = (student: StudentGradeRow, assessment: AssessmentItem) => {
@@ -299,25 +321,47 @@ export default function GradebookPage() {
 
       {/* Gradebook Matrix Table */}
       {!isLoading && !isError && gradebook && (
-        <div className="bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-800 bg-slate-950/80 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  <th className="py-3 px-4 w-12 text-center">#</th>
-                  <th className="py-3 px-4 w-28">Roll No</th>
-                  <th className="py-3 px-4 min-w-[140px]">Student Name</th>
-                  <th className="py-3 px-4 text-center w-24">Mastery %</th>
-                  {gradebook.assessments.map((a) => (
-                    <th key={a.id} className="py-3 px-4 text-center min-w-[130px]">
-                      <div className="font-bold text-slate-200 truncate">{a.title}</div>
-                      <div className="text-[10px] text-slate-400 font-mono font-normal">
-                        Max: {a.maxScore} • W: {a.weight}%
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+        <div className="space-y-3">
+          {/* Per-Type Class Averages Bar */}
+          {Object.keys(perTypeAverages).length > 0 && (
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-semibold text-slate-300">Class Average by Type:</span>
+              {Object.entries(perTypeAverages).map(([type, avg]) => (
+                <div
+                  key={type}
+                  className="px-2.5 py-1 bg-slate-800/80 border border-slate-700/60 rounded-lg flex items-center gap-1.5"
+                >
+                  <span className="font-mono text-[10px] uppercase font-bold text-indigo-300">{type}</span>
+                  <span className="font-mono font-semibold text-white">{avg}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-950/80 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    <th className="py-3 px-4 w-12 text-center">#</th>
+                    <th className="py-3 px-4 w-28">Roll No</th>
+                    <th className="py-3 px-4 min-w-[140px]">Student Name</th>
+                    <th className="py-3 px-4 text-center w-24">Mastery %</th>
+                    {gradebook.assessments.map((a) => (
+                      <th key={a.id} className="py-3 px-4 text-center min-w-[130px]">
+                        <div className="font-bold text-slate-200 truncate">{a.title}</div>
+                        <div className="flex items-center justify-center gap-1.5 my-0.5">
+                          <span className="px-1.5 py-0.5 text-[9px] rounded font-mono font-bold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            {a.type || "OTHER"}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono font-normal">
+                          Max: {a.maxScore} • W: {a.weight}%
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
               <tbody className="divide-y divide-slate-800/60 font-sans text-xs">
                 {gradebook.students.map((student, idx) => (
                   <tr
@@ -373,7 +417,8 @@ export default function GradebookPage() {
             </table>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* Edit Marks Dialog */}
       {isScoreModalOpen && activeCell && (
@@ -556,11 +601,13 @@ export default function GradebookPage() {
                     onChange={(e) => setAssessmentType(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="ASSIGNMENT">Assignment</option>
+                    <option value="CAT1">CAT 1</option>
+                    <option value="CAT2">CAT 2</option>
                     <option value="QUIZ">Quiz</option>
-                    <option value="EXAM">Exam</option>
+                    <option value="ASSIGNMENT">Assignment</option>
                     <option value="LAB">Lab Assessment</option>
-                    <option value="PROJECT">Project</option>
+                    <option value="FINAL">Final Exam</option>
+                    <option value="OTHER">Other</option>
                   </select>
                 </div>
                 <div>

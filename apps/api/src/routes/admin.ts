@@ -16,6 +16,24 @@ import {
 import { triggerEscalationDispatch } from "../services/escalation.service.js";
 import { getRiskExplanation } from "../services/student.service.js";
 import { prisma } from "@student-academic-ai/database";
+import {
+  getCourseAccreditation,
+  getProgramAccreditation,
+} from "../services/accreditation.service.js";
+import {
+  getAttendanceReportData,
+  exportAttendanceReport,
+  getMarksReportData,
+  exportMarksReport,
+  getDepartmentAnalyticsData,
+  exportDepartmentAnalyticsReport,
+  exportAccreditationReport,
+} from "../services/reports.service.js";
+import {
+  runContinuousAnalysis,
+  getRecentAnalysisRuns,
+} from "../services/analysis.service.js";
+import { ExportFormat } from "../services/export.service.js";
 
 const EscalateSchema = z.object({
   studentId: z.string().min(1, "studentId is required"),
@@ -337,6 +355,196 @@ export async function adminRoutes(app: FastifyInstance) {
       return reply.send(settings);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load settings";
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  // 13. ACCREDITATION ROUTES (Problem 3 / Module 9)
+  // GET /api/v1/admin/accreditation/program
+  app.get("/accreditation/program", async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user as AuthUser;
+    const query = request.query as { departmentId?: string };
+
+    try {
+      const data = await getProgramAccreditation(query.departmentId, user);
+      return reply.send(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load program accreditation";
+      if (msg === "FORBIDDEN" || msg === "FORBIDDEN_NO_DEPARTMENT") {
+        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested department" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  // GET /api/v1/admin/accreditation/:courseId
+  app.get("/accreditation/:courseId", async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user as AuthUser;
+    const { courseId } = request.params as { courseId: string };
+    const query = request.query as { format?: string };
+
+    try {
+      const format = query.format?.toLowerCase();
+      if (format === "xlsx" || format === "pdf" || format === "csv") {
+        const res = await exportAccreditationReport(courseId, format as ExportFormat, user);
+        reply.header("Content-Type", res.contentType);
+        reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
+        return reply.send(res.buffer);
+      }
+
+      const data = await getCourseAccreditation(courseId, user);
+      return reply.send(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load course accreditation";
+      if (msg === "COURSE_NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: "Course not found" });
+      }
+      if (msg === "FORBIDDEN") {
+        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested course" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  // 14. REPORTS ROUTES (Module 9)
+  // GET /api/v1/admin/reports/attendance
+  app.get("/reports/attendance", async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user as AuthUser;
+    const query = request.query as { courseId?: string; format?: string };
+
+    if (!query.courseId) {
+      return reply.status(400).send({ error: "Bad Request", message: "courseId is required" });
+    }
+
+    try {
+      const format = query.format?.toLowerCase();
+      if (format === "xlsx" || format === "pdf" || format === "csv") {
+        const res = await exportAttendanceReport(query.courseId, format as ExportFormat, user);
+        reply.header("Content-Type", res.contentType);
+        reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
+        return reply.send(res.buffer);
+      }
+
+      const data = await getAttendanceReportData(query.courseId, user);
+      return reply.send(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load attendance report";
+      if (msg === "COURSE_NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: "Course not found" });
+      }
+      if (msg === "FORBIDDEN") {
+        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested course" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  // GET /api/v1/admin/reports/marks
+  app.get("/reports/marks", async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user as AuthUser;
+    const query = request.query as { courseId?: string; format?: string };
+
+    if (!query.courseId) {
+      return reply.status(400).send({ error: "Bad Request", message: "courseId is required" });
+    }
+
+    try {
+      const format = query.format?.toLowerCase();
+      if (format === "xlsx" || format === "pdf" || format === "csv") {
+        const res = await exportMarksReport(query.courseId, format as ExportFormat, user);
+        reply.header("Content-Type", res.contentType);
+        reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
+        return reply.send(res.buffer);
+      }
+
+      const data = await getMarksReportData(query.courseId, user);
+      return reply.send(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load marks report";
+      if (msg === "COURSE_NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: "Course not found" });
+      }
+      if (msg === "FORBIDDEN") {
+        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested course" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  // GET /api/v1/admin/reports/department-analytics
+  app.get("/reports/department-analytics", async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user as AuthUser;
+    const query = request.query as { departmentId?: string; format?: string };
+
+    try {
+      const format = query.format?.toLowerCase();
+      if (format === "xlsx" || format === "pdf" || format === "csv") {
+        const res = await exportDepartmentAnalyticsReport(query.departmentId, format as ExportFormat, user);
+        reply.header("Content-Type", res.contentType);
+        reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
+        return reply.send(res.buffer);
+      }
+
+      const data = await getDepartmentAnalyticsData(query.departmentId, user);
+      return reply.send(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load department analytics";
+      if (msg === "FORBIDDEN" || msg === "FORBIDDEN_NO_DEPARTMENT") {
+        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested department" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  // GET /api/v1/admin/reports/accreditation
+  app.get("/reports/accreditation", async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user as AuthUser;
+    const query = request.query as { courseId?: string; format?: string };
+
+    if (!query.courseId) {
+      return reply.status(400).send({ error: "Bad Request", message: "courseId is required" });
+    }
+
+    try {
+      const format = query.format?.toLowerCase();
+      if (format === "xlsx" || format === "pdf" || format === "csv") {
+        const res = await exportAccreditationReport(query.courseId, format as ExportFormat, user);
+        reply.header("Content-Type", res.contentType);
+        reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
+        return reply.send(res.buffer);
+      }
+
+      const data = await getCourseAccreditation(query.courseId, user);
+      return reply.send(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load accreditation report";
+      if (msg === "COURSE_NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: "Course not found" });
+      }
+      if (msg === "FORBIDDEN") {
+        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested course" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  // 15. CONTINUOUS ANALYSIS RUNS (Module 8)
+  app.get("/analysis/runs", async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const runs = await getRecentAnalysisRuns(10);
+      return reply.send({ runs });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load analysis runs";
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  app.post("/analysis/run", async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const result = await runContinuousAnalysis();
+      return reply.send({ status: "ok", result });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Analysis run failed";
       return reply.status(500).send({ error: "Internal Server Error", message: msg });
     }
   });

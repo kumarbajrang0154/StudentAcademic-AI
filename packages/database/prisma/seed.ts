@@ -11,14 +11,18 @@ import {
   InterventionStatus,
   ResourceType,
   RiskCategory,
+  AssessmentType,
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import {
   attendancePercent,
+  safeBunks,
   courseMastery,
   academicMetricsToRiskInputs,
   riskScore,
   negativeVelocityWarning,
+  failRisk,
+  attendanceWarningLevel,
 } from '@student-academic-ai/core';
 
 const prisma = new PrismaClient();
@@ -495,26 +499,40 @@ async function main() {
     await prisma.attendanceRecord.createMany({ data: attendanceBatch });
 
     // 4 Assessments: 3 past graded (spread over last 8 weeks) + 1 UPCOMING ungraded (due in 3 days)
+    const firstType =
+      cDef.code === 'CS101'
+        ? AssessmentType.QUIZ
+        : cDef.code === 'CS102'
+          ? AssessmentType.LAB
+          : AssessmentType.ASSIGNMENT;
+
+    const firstTitle =
+      cDef.code === 'CS101'
+        ? 'Quiz 1: Core Fundamentals'
+        : cDef.code === 'CS102'
+          ? 'Lab Practical Assessment 1'
+          : 'Assignment 1: System Analysis';
+
     const assessmentsSpec = [
       {
-        title: 'Quiz 1: Core Fundamentals',
-        type: 'QUIZ',
+        title: firstTitle,
+        type: firstType,
         maxScore: 50,
         weight: 25,
         dueDate: new Date(now.getTime() - 42 * 24 * 60 * 60 * 1000), // 6 weeks ago
         isGraded: true,
       },
       {
-        title: 'Midterm Examination',
-        type: 'MIDTERM',
+        title: 'Continuous Assessment Test 1 (CAT-1)',
+        type: AssessmentType.CAT1,
         maxScore: 50,
         weight: 35,
         dueDate: new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000), // 4 weeks ago
         isGraded: true,
       },
       {
-        title: 'Comprehensive Evaluation & Project',
-        type: 'PROJECT',
+        title: 'Continuous Assessment Test 2 (CAT-2)',
+        type: AssessmentType.CAT2,
         maxScore: 100,
         weight: 40,
         dueDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), // 7 days ago (recent!)
@@ -522,7 +540,7 @@ async function main() {
       },
       {
         title: 'Final Term Assessment',
-        type: 'FINAL_EXAM',
+        type: AssessmentType.FINAL,
         maxScore: 50,
         weight: 0, // Ungraded upcoming
         dueDate:
@@ -752,6 +770,9 @@ async function main() {
     submissionDeficit: number;
     riskScoreVal: number;
     riskCategory: RiskCategory;
+    failRisk: string;
+    weakSubjectFlag: boolean;
+    attendanceWarningLevel: string;
   }> = [];
 
   for (const enr of allEnrollments) {
@@ -802,6 +823,17 @@ async function main() {
       category = RiskCategory.CRITICAL;
     }
 
+    const fr = failRisk({
+      mastery: masteryScore,
+      velocity,
+      attendance: attendanceRate,
+      riskCategory: category,
+    });
+    const weakSubject = masteryScore < 50 || fr.label !== 'ON_TRACK';
+    const attRec = attMap.get(`${enr.studentId}_${enr.courseId}`) ?? { present: 0, onDuty: 0, total: 0 };
+    const sb = safeBunks(attRec.present, attRec.onDuty, attRec.total);
+    const warnLevel = attendanceWarningLevel(attendanceRate, sb);
+
     updates.push({
       studentId: enr.studentId,
       courseId: enr.courseId,
@@ -811,6 +843,9 @@ async function main() {
       submissionDeficit,
       riskScoreVal: rResult.score,
       riskCategory: category,
+      failRisk: fr.label,
+      weakSubjectFlag: weakSubject,
+      attendanceWarningLevel: warnLevel,
     });
   }
 
@@ -826,6 +861,9 @@ async function main() {
           submissionDeficit: u.submissionDeficit,
           riskScore: u.riskScoreVal,
           riskCategory: u.riskCategory,
+          failRisk: u.failRisk,
+          weakSubjectFlag: u.weakSubjectFlag,
+          attendanceWarningLevel: u.attendanceWarningLevel,
         },
       }),
     ),

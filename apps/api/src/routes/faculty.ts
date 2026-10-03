@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { z } from "zod";
+import { AssessmentType } from "@student-academic-ai/database";
 import {
   requireRole,
   AuthUser,
@@ -12,13 +13,20 @@ import {
   parseFacultyVoice,
   getMentorMentees,
 } from "../services/faculty.service.js";
+import {
+  getAttendanceReportData,
+  exportAttendanceReport,
+  getMarksReportData,
+  exportMarksReport,
+} from "../services/reports.service.js";
+import { ExportFormat } from "../services/export.service.js";
 
 const AssessmentCreateSchema = z.object({
   courseId: z.string().min(1, "Course ID is required"),
   title: z.string().min(1, "Title is required"),
   maxScore: z.number().positive("Max score must be greater than 0"),
   weight: z.number().min(0).max(100, "Weight must be between 0 and 100"),
-  type: z.string().optional(),
+  type: z.nativeEnum(AssessmentType).optional(),
   dueDate: z.string().optional(),
 });
 
@@ -191,4 +199,77 @@ export const facultyRoutes: FastifyPluginAsync = async (app: FastifyInstance) =>
       }
     },
   );
+
+  // GET /api/v1/faculty/reports/attendance
+  app.get(
+    "/reports/attendance",
+    { preHandler: [requireRole("FACULTY", "HOD", "ADMIN")] },
+    async (request, reply) => {
+      const user = request.user as AuthUser;
+      const query = request.query as { courseId?: string; format?: string };
+
+      if (!query.courseId) {
+        return reply.status(400).send({ error: "Bad Request", message: "courseId is required" });
+      }
+
+      try {
+        const format = query.format?.toLowerCase();
+        if (format === "xlsx" || format === "pdf" || format === "csv") {
+          const res = await exportAttendanceReport(query.courseId, format as ExportFormat, user);
+          reply.header("Content-Type", res.contentType);
+          reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
+          return reply.send(res.buffer);
+        }
+
+        const data = await getAttendanceReportData(query.courseId, user);
+        return reply.send(data);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Failed to load attendance report";
+        if (msg === "COURSE_NOT_FOUND") {
+          return reply.status(404).send({ error: "Not Found", message: "Course not found" });
+        }
+        if (msg === "FORBIDDEN") {
+          return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested course" });
+        }
+        return reply.status(500).send({ error: "Internal Server Error", message: msg });
+      }
+    },
+  );
+
+  // GET /api/v1/faculty/reports/marks
+  app.get(
+    "/reports/marks",
+    { preHandler: [requireRole("FACULTY", "HOD", "ADMIN")] },
+    async (request, reply) => {
+      const user = request.user as AuthUser;
+      const query = request.query as { courseId?: string; format?: string };
+
+      if (!query.courseId) {
+        return reply.status(400).send({ error: "Bad Request", message: "courseId is required" });
+      }
+
+      try {
+        const format = query.format?.toLowerCase();
+        if (format === "xlsx" || format === "pdf" || format === "csv") {
+          const res = await exportMarksReport(query.courseId, format as ExportFormat, user);
+          reply.header("Content-Type", res.contentType);
+          reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
+          return reply.send(res.buffer);
+        }
+
+        const data = await getMarksReportData(query.courseId, user);
+        return reply.send(data);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Failed to load marks report";
+        if (msg === "COURSE_NOT_FOUND") {
+          return reply.status(404).send({ error: "Not Found", message: "Course not found" });
+        }
+        if (msg === "FORBIDDEN") {
+          return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested course" });
+        }
+        return reply.status(500).send({ error: "Internal Server Error", message: msg });
+      }
+    },
+  );
 };
+

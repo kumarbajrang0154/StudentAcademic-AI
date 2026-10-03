@@ -88,6 +88,16 @@ export function AdminShell({ children }: AdminShellProps) {
       icon: BookOpen,
     },
     {
+      href: "/admin/accreditation",
+      label: "Accreditation (OBE)",
+      icon: Award,
+    },
+    {
+      href: "/admin/reports",
+      label: "Reports & Exports",
+      icon: TrendingUp,
+    },
+    {
       href: "/admin/efficacy",
       label: "Intervention Efficacy",
       icon: TrendingUp,
@@ -104,11 +114,6 @@ export function AdminShell({ children }: AdminShellProps) {
       label: "Parent Gateway",
       icon: MessageSquare,
       tooltip: "Guardian portal & SMS/WhatsApp gateway (Module 8)",
-    },
-    {
-      label: "Accreditation",
-      icon: Award,
-      tooltip: "NBA/NAAC compliance reports & evidence export (Module 8)",
     },
   ];
 
