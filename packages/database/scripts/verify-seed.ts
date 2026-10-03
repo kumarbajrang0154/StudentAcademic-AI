@@ -222,6 +222,17 @@ async function main() {
 
   // 15. AuditLog table immutability (Postgres Trigger rejection)
   console.log("\n🔒 Testing AuditLog immutability (Postgres Trigger)...");
+  const triggers = await prisma.$queryRaw<Array<{ tgname: string }>>`
+    SELECT tgname 
+    FROM pg_trigger 
+    JOIN pg_class ON pg_trigger.tgrelid = pg_class.oid 
+    WHERE relname = 'AuditLog' AND tgname = 'trigger_audit_log_immutable';
+  `;
+  if (triggers.length === 0) {
+    throw new Error("CRITICAL: trigger_audit_log_immutable not found on AuditLog table in pg_trigger");
+  }
+  console.log("✓ Verified: trigger_audit_log_immutable exists in pg_trigger");
+
   const testLog = await prisma.auditLog.create({
     data: {
       entity: "VerificationTestModule2",
@@ -230,13 +241,19 @@ async function main() {
     },
   });
 
+  const EXPECTED_TRIGGER_MSG = "AuditLog is append-only: UPDATE and DELETE operations are not permitted on table AuditLog";
+
   let updateRejected = false;
   try {
     await prisma.$executeRaw`UPDATE "AuditLog" SET justification = 'Illegally modified' WHERE id = ${testLog.id}`;
   } catch (err: unknown) {
     updateRejected = true;
     const msg = err instanceof Error ? err.message : String(err);
-    console.log(`✓ Expected error on UPDATE: ${msg.split("\n")[0]}`);
+    if (!msg.includes(EXPECTED_TRIGGER_MSG)) {
+      throw new Error(`Assertion failed: expected error containing "${EXPECTED_TRIGGER_MSG}", got: ${msg}`);
+    }
+    const line = msg.split("\n").map((l) => l.trim()).find((l) => l.includes("AuditLog is append-only")) ?? msg;
+    console.log(`✓ Expected error on UPDATE: ${line}`);
   }
   if (!updateRejected) throw new Error("CRITICAL: AuditLog allowed UPDATE");
 
@@ -246,7 +263,11 @@ async function main() {
   } catch (err: unknown) {
     deleteRejected = true;
     const msg = err instanceof Error ? err.message : String(err);
-    console.log(`✓ Expected error on DELETE: ${msg.split("\n")[0]}`);
+    if (!msg.includes(EXPECTED_TRIGGER_MSG)) {
+      throw new Error(`Assertion failed: expected error containing "${EXPECTED_TRIGGER_MSG}", got: ${msg}`);
+    }
+    const line = msg.split("\n").map((l) => l.trim()).find((l) => l.includes("AuditLog is append-only")) ?? msg;
+    console.log(`✓ Expected error on DELETE: ${line}`);
   }
   if (!deleteRejected) throw new Error("CRITICAL: AuditLog allowed DELETE");
 
@@ -286,16 +307,19 @@ async function main() {
 
   console.log(` - Non-Scripted Cohort (${nonScriptedTotal} enrollments):`);
   console.log(`   Safe:     ${nonScriptedSafe} (${safePct}%) [Target >= 55%]`);
-  console.log(`   Moderate: ${nonScriptedModerate} (${moderatePct}%)`);
+  console.log(`   Moderate: ${nonScriptedModerate} (${moderatePct}%) [Target >= 12%]`);
   console.log(`   Critical: ${nonScriptedCritical} (${criticalPct}%) [Target <= 20%]`);
 
   if (safePct < 55) {
     throw new Error(`Assertion failed: Safe percentage expected >= 55%, found ${safePct}%`);
   }
+  if (moderatePct < 12) {
+    throw new Error(`Assertion failed: Moderate percentage expected >= 12%, found ${moderatePct}%`);
+  }
   if (criticalPct > 20) {
     throw new Error(`Assertion failed: Critical percentage expected <= 20%, found ${criticalPct}%`);
   }
-  console.log("✓ Verified: Safe >= 55% and Critical <= 20% on non-scripted cohort");
+  console.log("✓ Verified: Safe >= 55%, Moderate >= 12%, and Critical <= 20% on non-scripted cohort");
 
   console.log("\n====================================================");
   console.log("✅ ALL DATABASE SEED & MODULE 2 ASSERTIONS PASSED!");

@@ -119,7 +119,7 @@ function InterveneModal({ studentId, studentName, onClose }: InterveneModalProps
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
-  const [durationMin, setDurationMin] = useState(30);
+  const [durationMin, setDurationMin] = useState(15);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
 

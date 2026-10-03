@@ -467,15 +467,15 @@ async function main() {
         } else {
           // General distribution
           const hash = (stIdx * 17 + s * 13) % 100;
-          if (stIdx >= 36) {
-            // Critical
+          if (stIdx >= 35) {
+            // Critical: ~55% attendance (9 absences)
             status = hash < 45 ? AttendanceStatus.ABSENT : AttendanceStatus.PRESENT;
-          } else if (stIdx >= 28) {
-            // Moderate
-            status = hash < 22 ? AttendanceStatus.ABSENT : AttendanceStatus.PRESENT;
+          } else if (stIdx >= 27) {
+            // Moderate: ~70% attendance (6 absences)
+            status = hash < 30 ? AttendanceStatus.ABSENT : AttendanceStatus.PRESENT;
           } else {
-            // Safe
-            status = hash < 6 ? AttendanceStatus.ABSENT : AttendanceStatus.PRESENT;
+            // Safe: ~92% attendance (1-2 absences)
+            status = hash < 8 ? AttendanceStatus.ABSENT : AttendanceStatus.PRESENT;
           }
         }
 
@@ -609,15 +609,15 @@ async function main() {
         } else if (stIdx === 3) {
           // student04
           targetScorePct = 0.65;
-        } else if (stIdx >= 36) {
-          // Critical cohort (~10%)
+        } else if (stIdx >= 35) {
+          // Critical cohort (~14% of non-scripted: students 35-39)
           targetScorePct = 0.25;
-        } else if (stIdx >= 28) {
-          // Moderate cohort (~20%)
-          targetScorePct = 0.55;
+        } else if (stIdx >= 27) {
+          // Moderate cohort (~22% of non-scripted: students 27-34)
+          targetScorePct = 0.42;
         } else {
-          // Safe cohort (~70%)
-          targetScorePct = 0.70 + ((stIdx * 7) % 25) / 100;
+          // Safe cohort (~64% of non-scripted: students 4-26)
+          targetScorePct = 0.72 + ((stIdx * 7) % 20) / 100;
         }
 
         // Compute individual question scores that strictly sum to studentTotalScore

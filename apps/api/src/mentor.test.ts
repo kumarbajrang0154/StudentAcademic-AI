@@ -141,8 +141,8 @@ describe("Mentor Portal RBAC, Scope, and API Tests", () => {
     expect(body.mentee.student.id).toBe(student1Id);
     expect(body.mentee.student.guardianConsent).toBeDefined();
     // Verify privacy: no guardian phone number or password hash in mentee response
-    expect((body.mentee.student as any).guardianPhone).toBeUndefined();
-    expect((body.mentee.student as any).passwordHash).toBeUndefined();
+    expect((body.mentee.student as Record<string, unknown>).guardianPhone).toBeUndefined();
+    expect((body.mentee.student as Record<string, unknown>).passwordHash).toBeUndefined();
     expect(Array.isArray(body.mentee.courses)).toBe(true);
     expect(Array.isArray(body.mentee.topRiskDrivers)).toBe(true);
 
@@ -233,7 +233,7 @@ describe("Mentor Portal RBAC, Scope, and API Tests", () => {
     });
     expect(resList.statusCode).toBe(200);
     const listBody = JSON.parse(resList.body);
-    expect(listBody.notes.some((n: any) => n.id === createdNoteId)).toBe(true);
+    expect(listBody.notes.some((n: { id: string }) => n.id === createdNoteId)).toBe(true);
   }, 30000);
 
   // 6. Interventions scheduling, listing, patch, and ICS
@@ -254,6 +254,7 @@ describe("Mentor Portal RBAC, Scope, and API Tests", () => {
     expect(scheduleBody.intervention.id).toBeDefined();
     expect(scheduleBody.intervention.scheduledAt).toBeDefined();
     expect(typeof scheduleBody.intervention.preScoreAvg).toBe("number");
+    expect(scheduleBody.intervention.durationMin).toBe(15);
     expect(scheduleBody.intervention.icsUrl).toContain(`/api/v1/interventions/${scheduleBody.intervention.id}/ics`);
     createdInterventionId = scheduleBody.intervention.id;
 
@@ -335,7 +336,7 @@ describe("Mentor Portal RBAC, Scope, and API Tests", () => {
     });
     expect(resList.statusCode).toBe(200);
     const listBody = JSON.parse(resList.body);
-    expect(listBody.escalations.some((e: any) => e.id === createdEscalationId)).toBe(true);
+    expect(listBody.escalations.some((e: { id: string }) => e.id === createdEscalationId)).toBe(true);
   }, 30000);
 
   // 8. Notification 24h deduplication when risk worsens to CRITICAL

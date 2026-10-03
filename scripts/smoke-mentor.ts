@@ -223,7 +223,7 @@ async function runMentorSmokeTests() {
           studentId: studentAId,
           title: "Smoke test intervention",
           notes: "Smoke test — will be cleaned up",
-          durationMin: 30,
+          durationMin: 15,
           scheduledAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         },
       });

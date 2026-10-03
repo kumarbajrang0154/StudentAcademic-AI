@@ -1,3 +1,5 @@
+export const INTERVENTION_DURATION_MIN = 15;
+
 export interface TimetableSlotInput {
   dayOfWeek: number; // 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri
   startTime: string; // "HH:MM" (24h)
@@ -15,7 +17,7 @@ export interface FindSlotOptions {
   existingInterventions?: ExistingInterventionInput[];
   officeStartHour?: number; // default 15 (3 PM)
   officeEndHour?: number;   // default 17 (5 PM)
-  slotDurationMin?: number; // default 15 minutes
+  slotDurationMin?: number; // default INTERVENTION_DURATION_MIN (15 minutes)
   maxWorkingDays?: number;  // default 5 working days
 }
 
@@ -46,7 +48,7 @@ function timeToMinutes(timeStr: string): number {
 export function findInterventionSlot(options: FindSlotOptions = {}): FindSlotResponse {
   const officeStartHour = options.officeStartHour ?? 15;
   const officeEndHour = options.officeEndHour ?? 17;
-  const slotDurationMin = options.slotDurationMin ?? 15;
+  const slotDurationMin = options.slotDurationMin ?? INTERVENTION_DURATION_MIN;
   const maxWorkingDays = options.maxWorkingDays ?? 5;
   const timetableSlots = options.timetableSlots ?? [];
   const existingInterventions = options.existingInterventions ?? [];
@@ -56,7 +58,7 @@ export function findInterventionSlot(options: FindSlotOptions = {}): FindSlotRes
   // Parse existing interventions into absolute millisecond ranges
   const existingRanges = existingInterventions.map((item) => {
     const s = new Date(item.scheduledAt).getTime();
-    const duration = (item.durationMin ?? 15) * 60 * 1000;
+    const duration = (item.durationMin ?? INTERVENTION_DURATION_MIN) * 60 * 1000;
     return { start: s, end: s + duration };
   });
 

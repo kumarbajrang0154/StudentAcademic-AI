@@ -48,6 +48,7 @@ export {
 
 export {
   findInterventionSlot,
+  INTERVENTION_DURATION_MIN,
   type TimetableSlotInput,
   type ExistingInterventionInput,
   type FindSlotOptions,

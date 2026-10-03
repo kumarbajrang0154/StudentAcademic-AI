@@ -8,6 +8,7 @@ import {
 import { AuthUser } from "../lib/rbac.js";
 import {
   findInterventionSlot,
+  INTERVENTION_DURATION_MIN,
   velocityBand,
   explainRisk,
   academicMetricsToRiskInputs,
@@ -84,7 +85,7 @@ export interface MenteeDetailView {
     scheduledAt: string | null;
     durationMin: number;
     notes: string | null;
-    actionItems: any;
+    actionItems: unknown;
     preScoreAvg: number | null;
     postScoreAvg: number | null;
   }[];
@@ -645,7 +646,7 @@ export async function scheduleIntervention(
   }
 
   let slotStart: Date;
-  let durationMin = 15;
+  let durationMin = params.durationMin ?? INTERVENTION_DURATION_MIN;
 
   if (params.scheduledAt) {
     slotStart = new Date(params.scheduledAt);
@@ -845,7 +846,7 @@ export async function updateIntervention(
   data: {
     status?: InterventionStatus;
     notes?: string;
-    actionItems?: any;
+    actionItems?: Prisma.InputJsonValue;
   },
 ) {
   const existing = await prisma.intervention.findUnique({ where: { id } });

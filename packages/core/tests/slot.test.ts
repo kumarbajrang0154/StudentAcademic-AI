@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { findInterventionSlot } from "../src/slot.js";
+import { findInterventionSlot, INTERVENTION_DURATION_MIN } from "../src/slot.js";
 
 describe("findInterventionSlot", () => {
   it("finds the first available 15-minute slot inside office hours (15:00-17:00) on the next working day", () => {
+    expect(INTERVENTION_DURATION_MIN).toBe(15);
     // Start on Monday 2026-10-05
     const startDate = new Date("2026-10-05T10:00:00Z");
     const result = findInterventionSlot({ startDate });
@@ -10,7 +11,7 @@ describe("findInterventionSlot", () => {
     expect(result.slot).not.toBeNull();
     // Next day is Tuesday 2026-10-06 at 15:00 local time
     const slot = result.slot!;
-    expect(slot.durationMin).toBe(15);
+    expect(slot.durationMin).toBe(INTERVENTION_DURATION_MIN);
     expect(slot.slotStart.getHours()).toBe(15);
     expect(slot.slotStart.getMinutes()).toBe(0);
     expect(slot.slotEnd.getHours()).toBe(15);
