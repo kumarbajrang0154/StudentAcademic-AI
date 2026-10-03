@@ -32,6 +32,8 @@ export function AdminShell({ children }: AdminShellProps) {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const isAuthorizedRole = user?.role === "HOD" || user?.role === "ADMIN";
+
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
@@ -44,18 +46,13 @@ export function AdminShell({ children }: AdminShellProps) {
         router.push("/faculty/dashboard");
       } else if (user.role === "MENTOR") {
         router.push("/mentor/dashboard");
+      } else if (!isAuthorizedRole) {
+        router.push("/unauthorized");
       }
-      // Allowed: HOD, ADMIN
     }
-  }, [user, isLoading, pathname, router]);
+  }, [user, isLoading, isAuthorizedRole, pathname, router]);
 
-  if (
-    isLoading ||
-    !user ||
-    user.role === "STUDENT" ||
-    user.role === "FACULTY" ||
-    user.role === "MENTOR"
-  ) {
+  if (isLoading || !user || !isAuthorizedRole) {
     return (
       <div className="min-h-screen bg-[#090D16] flex items-center justify-center text-white">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />

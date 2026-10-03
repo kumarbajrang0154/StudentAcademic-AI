@@ -55,10 +55,16 @@ export default function AdminCoursesPage() {
   const filtered = courses.filter((c) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
+    const deptStr =
+      typeof c.department === "object"
+        ? (c.department as { code?: string; name?: string })?.code ||
+          (c.department as { code?: string; name?: string })?.name ||
+          ""
+        : c.department || "";
     return (
-      c.code.toLowerCase().includes(q) ||
-      c.name.toLowerCase().includes(q) ||
-      c.department.toLowerCase().includes(q)
+      (c.code || "").toLowerCase().includes(q) ||
+      (c.name || "").toLowerCase().includes(q) ||
+      deptStr.toLowerCase().includes(q)
     );
   });
 
@@ -164,7 +170,13 @@ export default function AdminCoursesPage() {
                       <div className="text-[11px] text-slate-400">{c.name}</div>
                     </td>
                     <td className="py-3 px-3">
-                      <span className="font-medium text-slate-300">{c.department}</span>
+                      <span className="font-medium text-slate-300">
+                        {typeof c.department === "object"
+                          ? (c.department as { code?: string; name?: string })?.code ||
+                            (c.department as { code?: string; name?: string })?.name ||
+                            "CSE"
+                          : c.department || "CSE"}
+                      </span>
                     </td>
                     <td className="py-3 px-3">
                       <span className="font-mono text-slate-300">{c.enrolledStudentsCount} students</span>

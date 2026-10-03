@@ -155,6 +155,13 @@ describe("Module 7: HOD / Admin Portal & Escalation Management", { timeout: 9000
       headers: { authorization: `Bearer ${hodToken}` },
     });
     expect(hodRes.statusCode).toBe(200);
+    const hodBody = JSON.parse(hodRes.body);
+    expect(hodBody.kpis).toBeDefined();
+    expect(hodBody.kpis.retentionRiskIndex).toBeDefined();
+    expect(hodBody.kpis.projectedDebarments).toBeDefined();
+    expect(hodBody.kpis.curriculumBottlenecks).toBeDefined();
+    expect(hodBody.charts).toBeDefined();
+    expect(hodBody.escalationsQueue).toBeDefined();
 
     const adminRes = await app.inject({
       method: "GET",
@@ -162,6 +169,11 @@ describe("Module 7: HOD / Admin Portal & Escalation Management", { timeout: 9000
       headers: { authorization: `Bearer ${adminToken}` },
     });
     expect(adminRes.statusCode).toBe(200);
+    const adminBody = JSON.parse(adminRes.body);
+    expect(adminBody.kpis).toBeDefined();
+    expect(adminBody.kpis.retentionRiskIndex).toBeDefined();
+    expect(adminBody.charts).toBeDefined();
+    expect(adminBody.escalationsQueue).toBeDefined();
   });
 
   // ──────────────────────────────────────────────────────────
