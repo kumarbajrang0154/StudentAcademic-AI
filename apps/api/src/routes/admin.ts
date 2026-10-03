@@ -1,551 +1,549 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
-import { requireRole, AuthUser, canViewStudent, canAccessDepartment } from "../lib/rbac.js";
+import { requireRole, AuthUser } from "../lib/rbac.js";
+import { Role } from "@prisma/client";
 import {
-  getAdminOverview,
-  getAdminEscalations,
-  getAdminEscalationById,
-  resolveAdminEscalation,
-  getAdminStudents,
-  getAdminCourses,
-  getAdminInterventionsEfficacy,
-  getAdminAuditLogs,
-  getAdminSettings,
-  getAdminJobStatus,
-} from "../services/admin.service.js";
-import { triggerEscalationDispatch } from "../services/escalation.service.js";
-import { getRiskExplanation } from "../services/student.service.js";
-import { prisma } from "@student-academic-ai/database";
-import {
-  getCourseAccreditation,
-  getProgramAccreditation,
-} from "../services/accreditation.service.js";
-import {
-  getAttendanceReportData,
-  exportAttendanceReport,
-  getMarksReportData,
-  exportMarksReport,
-  getDepartmentAnalyticsData,
-  exportDepartmentAnalyticsReport,
-  exportAccreditationReport,
-} from "../services/reports.service.js";
-import {
-  runContinuousAnalysis,
-  getRecentAnalysisRuns,
-} from "../services/analysis.service.js";
-import { ExportFormat } from "../services/export.service.js";
+  getAdminSystemOverview,
+  getAdminUsers,
+  createAdminUser,
+  updateAdminUser,
+  resetAdminUserPassword,
+  setAdminUserStatus,
+  deleteAdminUser,
+  enrollAdminStudent,
+  unenrollAdminStudent,
+  assignAdminMentor,
+  importStudentsFromCsv,
+  assignCourseFaculty,
+  listAdminDepartments,
+  createAdminDepartment,
+  updateAdminDepartment,
+  listAdminCourses,
+  createAdminCourse,
+  updateAdminCourse,
+  deleteAdminCourse,
+  getAdminAudit,
+  getAdminSystemSettings,
+} from "../services/admin-mgmt.service.js";
+import { runContinuousAnalysis, getRecentAnalysisRuns } from "../services/analysis.service.js";
 
-const EscalateSchema = z.object({
-  studentId: z.string().min(1, "studentId is required"),
-  reason: z.string().optional(),
-  severity: z.enum(["STANDARD", "SEVERE"]).optional(),
-  triggerChannels: z
-    .array(z.enum(["IN_APP", "WHATSAPP", "SMS", "EMAIL"]))
-    .optional(),
+const CreateUserSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Valid email is required"),
+  role: z.enum(["STUDENT", "FACULTY", "MENTOR", "HOD", "ADMIN"]),
+  departmentId: z.string().optional(),
+  rollNumber: z.string().optional(),
+  replaceExistingHead: z.boolean().optional(),
 });
 
-const ResolveEscalationSchema = z.object({
-  status: z.enum(["RESOLVED", "CLOSED"]),
-  resolutionNote: z
-    .string()
-    .min(5, "Resolution note is required (at least 5 characters)"),
+const UpdateUserSchema = z.object({
+  name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  role: z.enum(["STUDENT", "FACULTY", "MENTOR", "HOD", "ADMIN"]).optional(),
+  departmentId: z.string().nullable().optional(),
+  rollNumber: z.string().nullable().optional(),
+  replaceExistingHead: z.boolean().optional(),
+});
+
+const SetUserStatusSchema = z.object({
+  isActive: z.boolean(),
+});
+
+const EnrollStudentSchema = z.object({
+  courseId: z.string().min(1, "courseId is required"),
+});
+
+const AssignMentorSchema = z.object({
+  mentorId: z.string().min(1, "mentorId is required"),
+});
+
+const ImportStudentsSchema = z.object({
+  confirmCreate: z.boolean().default(false),
+  rows: z.array(
+    z.object({
+      name: z.string(),
+      email: z.string(),
+      rollNumber: z.string().optional(),
+      departmentCode: z.string().optional(),
+    }),
+  ),
+});
+
+const AssignFacultySchema = z.object({
+  facultyId: z.string().nullable(),
+});
+
+const CreateDepartmentSchema = z.object({
+  code: z.string().min(1, "Department code is required"),
+  name: z.string().min(1, "Department name is required"),
+  headId: z.string().optional(),
+});
+
+const UpdateDepartmentSchema = z.object({
+  code: z.string().optional(),
+  name: z.string().optional(),
+  headId: z.string().nullable().optional(),
+  replaceExistingHead: z.boolean().optional(),
+});
+
+const CreateCourseSchema = z.object({
+  code: z.string().min(1, "Course code is required"),
+  name: z.string().min(1, "Course title is required"),
+  credits: z.number().int().min(1).max(10).default(3),
+  departmentId: z.string().min(1, "Department is required"),
+  facultyId: z.string().optional(),
+});
+
+const UpdateCourseSchema = z.object({
+  code: z.string().optional(),
+  name: z.string().optional(),
+  credits: z.number().int().min(1).max(10).optional(),
+  facultyId: z.string().nullable().optional(),
 });
 
 export async function adminRoutes(app: FastifyInstance) {
-  // All /admin routes require HOD or ADMIN role
-  app.addHook("preHandler", requireRole("HOD", "ADMIN"));
+  // All /admin routes are strictly for ADMIN only!
+  app.addHook("preHandler", requireRole("ADMIN"));
 
-  // 1. GET /api/v1/admin/overview
-  app.get("/overview", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const query = request.query as { departmentId?: string };
-
+  // 1. System Overview & Health
+  app.get("/overview", async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const overview = await getAdminOverview(user, query.departmentId);
-      return reply.send(overview);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load admin overview";
-      if (msg === "FORBIDDEN_NO_DEPARTMENT") {
-        return reply.status(403).send({ error: "Forbidden", message: "HOD must have an assigned department" });
-      }
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 2. POST /api/v1/admin/escalate
-  app.post("/escalate", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const parseResult = EscalateSchema.safeParse(request.body);
-    if (!parseResult.success) {
-      return reply.status(400).send({
-        error: "Bad Request",
-        message: parseResult.error.errors[0]?.message || "Invalid payload",
-      });
-    }
-
-    const { studentId, reason, severity, triggerChannels } = parseResult.data;
-
-    // Verify student exists and scope check
-    const student = await prisma.user.findUnique({
-      where: { id: studentId },
-      select: { id: true, departmentId: true },
-    });
-
-    if (!student) {
-      return reply.status(404).send({ error: "Not Found", message: "Student not found" });
-    }
-
-    if (user.role === "HOD") {
-      if (!student.departmentId || !canAccessDepartment(user, student.departmentId)) {
-        return reply.status(403).send({
-          error: "Forbidden",
-          message: "Cannot escalate student outside your department scope",
-        });
-      }
-    }
-
-    try {
-      const result = await triggerEscalationDispatch({
-        studentId,
-        reason,
-        severity,
-        triggerChannels,
-        actorId: user.id,
-      });
-
-      return reply.status(202).send({
-        jobId: result.jobId,
-        status: result.status,
-        estimatedDispatchMs: result.estimatedDispatchMs,
-        deduplicated: result.deduplicated ?? false,
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to dispatch escalation";
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 3. GET /api/v1/admin/jobs/:jobId
-  app.get("/jobs/:jobId", async (request: FastifyRequest, reply: FastifyReply) => {
-    const params = request.params as { jobId: string };
-    try {
-      const res = await getAdminJobStatus(params.jobId);
-      return reply.send(res);
-    } catch {
-      return reply.status(404).send({ error: "Not Found", message: "Job not found" });
-    }
-  });
-
-  // 4. GET /api/v1/admin/escalations
-  app.get("/escalations", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const query = request.query as { status?: string; page?: string; limit?: string };
-    const page = parseInt(query.page || "1", 10) || 1;
-    const limit = parseInt(query.limit || "20", 10) || 20;
-
-    try {
-      const res = await getAdminEscalations(user, query.status, page, limit);
-      return reply.send(res);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load escalations";
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 5. GET /api/v1/admin/escalations/:id
-  app.get("/escalations/:id", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const params = request.params as { id: string };
-
-    try {
-      const res = await getAdminEscalationById(user, params.id);
-      return reply.send(res);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg === "NOT_FOUND") {
-        return reply.status(404).send({ error: "Not Found", message: "Escalation case not found" });
-      }
-      if (msg === "FORBIDDEN") {
-        return reply.status(403).send({ error: "Forbidden", message: "Access to this escalation case is restricted" });
-      }
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 6. PATCH /api/v1/admin/escalations/:id
-  app.patch("/escalations/:id", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const params = request.params as { id: string };
-
-    const parseResult = ResolveEscalationSchema.safeParse(request.body);
-    if (!parseResult.success) {
-      return reply.status(400).send({
-        error: "Bad Request",
-        message: parseResult.error.errors[0]?.message || "Invalid payload",
-      });
-    }
-
-    try {
-      const updated = await resolveAdminEscalation(
-        user,
-        params.id,
-        parseResult.data.status,
-        parseResult.data.resolutionNote,
-      );
-      return reply.send({ status: "ok", escalation: updated });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg === "NOT_FOUND") {
-        return reply.status(404).send({ error: "Not Found", message: "Escalation case not found" });
-      }
-      if (msg === "FORBIDDEN") {
-        return reply.status(403).send({ error: "Forbidden", message: "Access restricted" });
-      }
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 7. GET /api/v1/admin/students
-  app.get("/students", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const query = request.query as {
-      search?: string;
-      risk?: string;
-      courseId?: string;
-      page?: string;
-      limit?: string;
-    };
-    const page = parseInt(query.page || "1", 10) || 1;
-    const limit = parseInt(query.limit || "20", 10) || 20;
-
-    try {
-      const res = await getAdminStudents(
-        user,
-        query.search,
-        query.risk,
-        query.courseId,
-        page,
-        limit,
-      );
-      return reply.send(res);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load students";
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 8. GET /api/v1/admin/students/:id
-  app.get("/students/:id", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const params = request.params as { id: string };
-    const query = request.query as { courseId?: string };
-
-    const student = await prisma.user.findUnique({
-      where: { id: params.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        departmentId: true,
-        department: { select: { id: true, name: true, code: true } },
-        enrollments: {
-          select: {
-            id: true,
-            courseId: true,
-            riskCategory: true,
-            attendanceRate: true,
-            masteryScore: true,
-            velocity: true,
-            submissionDeficit: true,
-            course: { select: { id: true, code: true, name: true } },
-          },
-        },
-      },
-    });
-
-    if (!student) {
-      return reply.status(404).send({ error: "Not Found", message: "Student not found" });
-    }
-
-    if (!canViewStudent(user, student)) {
-      return reply.status(403).send({ error: "Forbidden", message: "Access restricted" });
-    }
-
-    const targetCourseId = query.courseId || student.enrollments[0]?.courseId;
-    let riskExplanation = null;
-    if (targetCourseId) {
-      try {
-        riskExplanation = await getRiskExplanation(student.id, targetCourseId);
-      } catch {
-        riskExplanation = null;
-      }
-    }
-
-    return reply.send({
-      student: {
-        id: student.id,
-        name: student.name,
-        email: student.email,
-        department: student.department,
-        enrollments: student.enrollments,
-      },
-      riskExplanation,
-    });
-  });
-
-  // 9. GET /api/v1/admin/courses
-  app.get("/courses", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    try {
-      const courses = await getAdminCourses(user);
-      return reply.send({ courses });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load courses";
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 10. GET /api/v1/admin/interventions/efficacy
-  app.get("/interventions/efficacy", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    try {
-      const res = await getAdminInterventionsEfficacy(user);
-      return reply.send(res);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to compute efficacy";
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 11. GET /api/v1/admin/audit
-  app.get("/audit", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const query = request.query as {
-      entity?: string;
-      actorId?: string;
-      from?: string;
-      to?: string;
-      page?: string;
-      limit?: string;
-    };
-    const page = parseInt(query.page || "1", 10) || 1;
-    const limit = parseInt(query.limit || "20", 10) || 20;
-
-    try {
-      const res = await getAdminAuditLogs(
-        user,
-        query.entity,
-        query.actorId,
-        query.from,
-        query.to,
-        page,
-        limit,
-      );
-      return reply.send(res);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load audit logs";
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 12. GET /api/v1/admin/settings
-  app.get("/settings", async (_request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const settings = await getAdminSettings();
-      return reply.send(settings);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load settings";
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 13. ACCREDITATION ROUTES (Problem 3 / Module 9)
-  // GET /api/v1/admin/accreditation/program
-  app.get("/accreditation/program", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const query = request.query as { departmentId?: string };
-
-    try {
-      const data = await getProgramAccreditation(query.departmentId, user);
+      const data = await getAdminSystemOverview();
       return reply.send(data);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load program accreditation";
-      if (msg === "FORBIDDEN" || msg === "FORBIDDEN_NO_DEPARTMENT") {
-        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested department" });
-      }
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
     }
   });
 
-  // GET /api/v1/admin/accreditation/:courseId
-  app.get("/accreditation/:courseId", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const { courseId } = request.params as { courseId: string };
-    const query = request.query as { format?: string };
-
-    try {
-      const format = query.format?.toLowerCase();
-      if (format === "xlsx" || format === "pdf" || format === "csv") {
-        const res = await exportAccreditationReport(courseId, format as ExportFormat, user);
-        reply.header("Content-Type", res.contentType);
-        reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
-        return reply.send(res.buffer);
-      }
-
-      const data = await getCourseAccreditation(courseId, user);
-      return reply.send(data);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load course accreditation";
-      if (msg === "COURSE_NOT_FOUND") {
-        return reply.status(404).send({ error: "Not Found", message: "Course not found" });
-      }
-      if (msg === "FORBIDDEN") {
-        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested course" });
-      }
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 14. REPORTS ROUTES (Module 9)
-  // GET /api/v1/admin/reports/attendance
-  app.get("/reports/attendance", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const query = request.query as { courseId?: string; format?: string };
-
-    if (!query.courseId) {
-      return reply.status(400).send({ error: "Bad Request", message: "courseId is required" });
-    }
-
-    try {
-      const format = query.format?.toLowerCase();
-      if (format === "xlsx" || format === "pdf" || format === "csv") {
-        const res = await exportAttendanceReport(query.courseId, format as ExportFormat, user);
-        reply.header("Content-Type", res.contentType);
-        reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
-        return reply.send(res.buffer);
-      }
-
-      const data = await getAttendanceReportData(query.courseId, user);
-      return reply.send(data);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load attendance report";
-      if (msg === "COURSE_NOT_FOUND") {
-        return reply.status(404).send({ error: "Not Found", message: "Course not found" });
-      }
-      if (msg === "FORBIDDEN") {
-        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested course" });
-      }
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // GET /api/v1/admin/reports/marks
-  app.get("/reports/marks", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const query = request.query as { courseId?: string; format?: string };
-
-    if (!query.courseId) {
-      return reply.status(400).send({ error: "Bad Request", message: "courseId is required" });
-    }
-
-    try {
-      const format = query.format?.toLowerCase();
-      if (format === "xlsx" || format === "pdf" || format === "csv") {
-        const res = await exportMarksReport(query.courseId, format as ExportFormat, user);
-        reply.header("Content-Type", res.contentType);
-        reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
-        return reply.send(res.buffer);
-      }
-
-      const data = await getMarksReportData(query.courseId, user);
-      return reply.send(data);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load marks report";
-      if (msg === "COURSE_NOT_FOUND") {
-        return reply.status(404).send({ error: "Not Found", message: "Course not found" });
-      }
-      if (msg === "FORBIDDEN") {
-        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested course" });
-      }
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // GET /api/v1/admin/reports/department-analytics
-  app.get("/reports/department-analytics", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const query = request.query as { departmentId?: string; format?: string };
-
-    try {
-      const format = query.format?.toLowerCase();
-      if (format === "xlsx" || format === "pdf" || format === "csv") {
-        const res = await exportDepartmentAnalyticsReport(query.departmentId, format as ExportFormat, user);
-        reply.header("Content-Type", res.contentType);
-        reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
-        return reply.send(res.buffer);
-      }
-
-      const data = await getDepartmentAnalyticsData(query.departmentId, user);
-      return reply.send(data);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load department analytics";
-      if (msg === "FORBIDDEN" || msg === "FORBIDDEN_NO_DEPARTMENT") {
-        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested department" });
-      }
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // GET /api/v1/admin/reports/accreditation
-  app.get("/reports/accreditation", async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = request.user as AuthUser;
-    const query = request.query as { courseId?: string; format?: string };
-
-    if (!query.courseId) {
-      return reply.status(400).send({ error: "Bad Request", message: "courseId is required" });
-    }
-
-    try {
-      const format = query.format?.toLowerCase();
-      if (format === "xlsx" || format === "pdf" || format === "csv") {
-        const res = await exportAccreditationReport(query.courseId, format as ExportFormat, user);
-        reply.header("Content-Type", res.contentType);
-        reply.header("Content-Disposition", `attachment; filename="${res.filename}"`);
-        return reply.send(res.buffer);
-      }
-
-      const data = await getCourseAccreditation(query.courseId, user);
-      return reply.send(data);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load accreditation report";
-      if (msg === "COURSE_NOT_FOUND") {
-        return reply.status(404).send({ error: "Not Found", message: "Course not found" });
-      }
-      if (msg === "FORBIDDEN") {
-        return reply.status(403).send({ error: "Forbidden", message: "Access denied to requested course" });
-      }
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
-  // 15. CONTINUOUS ANALYSIS RUNS (Module 8)
-  app.get("/analysis/runs", async (_request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const runs = await getRecentAnalysisRuns(10);
-      return reply.send({ runs });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load analysis runs";
-      return reply.status(500).send({ error: "Internal Server Error", message: msg });
-    }
-  });
-
+  // 2. Continuous Analysis Trigger
   app.post("/analysis/run", async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
       const result = await runContinuousAnalysis();
-      return reply.send({ status: "ok", result });
+      return reply.send(result);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Analysis run failed";
+      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
+    }
+  });
+
+  app.get("/analysis/runs", async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const runs = await getRecentAnalysisRuns(10);
+      return reply.send(runs);
+    } catch (err: unknown) {
+      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
+    }
+  });
+
+  // 3. User Management
+  app.get("/users", async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = request.query as {
+      search?: string;
+      role?: Role;
+      departmentId?: string;
+      status?: "ACTIVE" | "INACTIVE" | "ALL";
+      page?: string;
+      limit?: string;
+    };
+
+    try {
+      const data = await getAdminUsers({
+        search: query.search,
+        role: query.role,
+        departmentId: query.departmentId,
+        status: query.status,
+        page: query.page ? parseInt(query.page, 10) : undefined,
+        limit: query.limit ? parseInt(query.limit, 10) : undefined,
+      });
+      return reply.send(data);
+    } catch (err: unknown) {
+      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
+    }
+  });
+
+  app.post("/users", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const parsed = CreateUserSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "Bad Request",
+        message: parsed.error.errors[0]?.message || "Invalid payload",
+      });
+    }
+
+    try {
+      const result = await createAdminUser(actor, parsed.data);
+      if ("requiresConfirmation" in result) {
+        return reply.status(409).send(result);
+      }
+      return reply.status(201).send(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "EMAIL_EXISTS") {
+        return reply.status(409).send({ error: "Conflict", message: "Email already exists" });
+      }
+      if (msg === "HOD_REQUIRES_DEPARTMENT") {
+        return reply.status(400).send({ error: "Bad Request", message: "HOD role requires a department" });
+      }
+      if (msg === "DEPARTMENT_NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: "Department not found" });
+      }
       return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  app.patch("/users/:id", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+
+    const parsed = UpdateUserSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "Bad Request",
+        message: parsed.error.errors[0]?.message || "Invalid payload",
+      });
+    }
+
+    try {
+      const result = await updateAdminUser(actor, id, parsed.data);
+      if ("requiresConfirmation" in result) {
+        return reply.status(409).send(result);
+      }
+      return reply.send(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: "User not found" });
+      }
+      if (msg === "EMAIL_EXISTS") {
+        return reply.status(409).send({ error: "Conflict", message: "Email already in use" });
+      }
+      if (msg === "CANNOT_MODIFY_SELF_ROLE") {
+        return reply.status(403).send({ error: "Forbidden", message: "Cannot change your own administrator role" });
+      }
+      if (msg === "CANNOT_MODIFY_LAST_ADMIN") {
+        return reply.status(403).send({ error: "Forbidden", message: "Cannot change role of the last active administrator" });
+      }
+      if (msg === "HOD_REQUIRES_DEPARTMENT") {
+        return reply.status(400).send({ error: "Bad Request", message: "HOD role requires a department" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  const resetPasswordHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+
+    try {
+      const result = await resetAdminUserPassword(actor, id);
+      return reply.send(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: "User not found" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  };
+
+  app.patch("/users/:id/reset-password", resetPasswordHandler);
+  app.post("/users/:id/reset-password", resetPasswordHandler);
+
+  app.patch("/users/:id/status", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+
+    const parsed = SetUserStatusSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "Bad Request",
+        message: parsed.error.errors[0]?.message || "Invalid payload",
+      });
+    }
+
+    try {
+      const result = await setAdminUserStatus(actor, id, parsed.data.isActive);
+      return reply.send(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "CANNOT_MODIFY_SELF") {
+        return reply.status(403).send({ error: "Forbidden", message: "Cannot deactivate your own account" });
+      }
+      if (msg === "CANNOT_DEACTIVATE_LAST_ADMIN") {
+        return reply.status(403).send({ error: "Forbidden", message: "Cannot deactivate the last active administrator" });
+      }
+      if (msg === "NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: "User not found" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  app.delete("/users/:id", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+
+    try {
+      const result = await deleteAdminUser(actor, id);
+      return reply.send(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "CANNOT_MODIFY_SELF") {
+        return reply.status(403).send({ error: "Forbidden", message: "Cannot delete your own account" });
+      }
+      if (msg === "CANNOT_DELETE_LAST_ADMIN") {
+        return reply.status(403).send({ error: "Forbidden", message: "Cannot delete the last active administrator" });
+      }
+      if (msg === "HAS_RECORDS") {
+        const details = (err as any).details || "User has dependent records; deactivate instead.";
+        return reply.status(409).send({ error: "Conflict", message: details });
+      }
+      if (msg === "NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: "User not found" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  // 4. Student Management: Enrollments & Mentors
+  app.post("/students/:id/enroll", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+    const parsed = EnrollStudentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Bad Request", message: parsed.error.errors[0]?.message });
+    }
+
+    try {
+      const enrollment = await enrollAdminStudent(actor, id, parsed.data.courseId);
+      return reply.status(201).send(enrollment);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "ALREADY_ENROLLED") {
+        return reply.status(409).send({ error: "Conflict", message: "Student is already enrolled in this course" });
+      }
+      if (msg === "STUDENT_NOT_FOUND" || msg === "COURSE_NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: msg });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  app.post("/students/:id/unenroll", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+    const parsed = EnrollStudentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Bad Request", message: parsed.error.errors[0]?.message });
+    }
+
+    try {
+      const result = await unenrollAdminStudent(actor, id, parsed.data.courseId);
+      return reply.send(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "NOT_ENROLLED") {
+        return reply.status(404).send({ error: "Not Found", message: "Student is not enrolled in this course" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  app.post("/students/:id/mentor", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+    const parsed = AssignMentorSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Bad Request", message: parsed.error.errors[0]?.message });
+    }
+
+    try {
+      const assignment = await assignAdminMentor(actor, id, parsed.data.mentorId);
+      return reply.send(assignment);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "STUDENT_NOT_FOUND" || msg === "MENTOR_NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: msg });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  app.post("/students/import-csv", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const parsed = ImportStudentsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Bad Request", message: parsed.error.errors[0]?.message });
+    }
+
+    try {
+      const result = await importStudentsFromCsv(actor, parsed.data.rows, parsed.data.confirmCreate);
+      return reply.send(result);
+    } catch (err: unknown) {
+      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
+    }
+  });
+
+  // 5. Faculty Management
+  app.post("/courses/:id/faculty", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+    const parsed = AssignFacultySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Bad Request", message: parsed.error.errors[0]?.message });
+    }
+
+    try {
+      const updated = await assignCourseFaculty(actor, id, parsed.data.facultyId);
+      return reply.send(updated);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "COURSE_NOT_FOUND" || msg === "FACULTY_NOT_FOUND") {
+        return reply.status(404).send({ error: "Not Found", message: msg });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  // 6. Departments & Courses
+  app.get("/departments", async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const list = await listAdminDepartments();
+      return reply.send(list);
+    } catch (err: unknown) {
+      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
+    }
+  });
+
+  app.post("/departments", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const parsed = CreateDepartmentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Bad Request", message: parsed.error.errors[0]?.message });
+    }
+    try {
+      const dept = await createAdminDepartment(actor, parsed.data);
+      return reply.status(201).send(dept);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "DEPT_CODE_EXISTS") {
+        return reply.status(409).send({ error: "Conflict", message: "Department code already exists" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  app.patch("/departments/:id", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+    const parsed = UpdateDepartmentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Bad Request", message: parsed.error.errors[0]?.message });
+    }
+    try {
+      const updated = await updateAdminDepartment(actor, id, parsed.data);
+      return reply.send(updated);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "NOT_FOUND") return reply.status(404).send({ error: "Not Found", message: "Department not found" });
+      if (msg === "DEPT_CODE_EXISTS") return reply.status(409).send({ error: "Conflict", message: "Department code already exists" });
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  app.get("/courses", async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const list = await listAdminCourses();
+      return reply.send(list);
+    } catch (err: unknown) {
+      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
+    }
+  });
+
+  app.post("/courses", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const parsed = CreateCourseSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Bad Request", message: parsed.error.errors[0]?.message });
+    }
+    try {
+      const course = await createAdminCourse(actor, parsed.data);
+      return reply.status(201).send(course);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "COURSE_CODE_EXISTS") {
+        return reply.status(409).send({ error: "Conflict", message: "Course code already exists" });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  app.patch("/courses/:id", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+    const parsed = UpdateCourseSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Bad Request", message: parsed.error.errors[0]?.message });
+    }
+    try {
+      const updated = await updateAdminCourse(actor, id, parsed.data);
+      return reply.send(updated);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "NOT_FOUND") return reply.status(404).send({ error: "Not Found", message: "Course not found" });
+      if (msg === "COURSE_CODE_EXISTS") return reply.status(409).send({ error: "Conflict", message: "Course code already exists" });
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  app.delete("/courses/:id", async (request: FastifyRequest, reply: FastifyReply) => {
+    const actor = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+    try {
+      const result = await deleteAdminCourse(actor, id);
+      return reply.send(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === "NOT_FOUND") return reply.status(404).send({ error: "Not Found", message: "Course not found" });
+      if (msg === "HAS_RECORDS") {
+        const details = (err as any).details || "Course has records; cannot be deleted.";
+        return reply.status(409).send({ error: "Conflict", message: details });
+      }
+      return reply.status(500).send({ error: "Internal Server Error", message: msg });
+    }
+  });
+
+  // 7. Audit Viewer & Settings
+  app.get("/audit", async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = request.query as {
+      page?: string;
+      limit?: string;
+      entity?: string;
+      action?: string;
+      startDate?: string;
+      endDate?: string;
+    };
+    try {
+      const data = await getAdminAudit({
+        page: query.page ? parseInt(query.page, 10) : undefined,
+        limit: query.limit ? parseInt(query.limit, 10) : undefined,
+        entity: query.entity,
+        action: query.action,
+        startDate: query.startDate,
+        endDate: query.endDate,
+      });
+      return reply.send(data);
+    } catch (err: unknown) {
+      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
+    }
+  });
+
+  app.get("/settings", async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const settings = getAdminSystemSettings();
+      return reply.send(settings);
+    } catch (err: unknown) {
+      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
     }
   });
 }

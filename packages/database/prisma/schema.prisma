@@ -66,6 +66,8 @@ model Department {
   id              String           @id @default(cuid())
   name            String
   code            String           @unique
+  headId          String?          @unique
+  head            User?            @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
   users           User[]
   courses         Course[]
   programOutcomes ProgramOutcome[]
@@ -83,6 +85,14 @@ model User {
   role          Role        @default(STUDENT)
   departmentId  String?
   department    Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  // Lifecycle & Identity
+  isActive           Boolean     @default(true)
+  mustChangePassword Boolean     @default(false)
+  deactivatedAt      DateTime?
+  rollNumber         String?
+  headedDepartment   Department? @relation("DepartmentHead")
+  coursesTeaching    Course[]    @relation("CourseFaculty")
 
   // Academic Relations
   enrollments             CourseEnrollment[]
@@ -116,6 +126,7 @@ model User {
   @@index([departmentId])
   @@index([role])
   @@index([email])
+  @@index([isActive])
 }
 
 model Course {
@@ -125,6 +136,8 @@ model Course {
   credits        Int              @default(3)
   departmentId   String
   department     Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  facultyId      String?
+  faculty        User?            @relation("CourseFaculty", fields: [facultyId], references: [id], onDelete: SetNull)
 
   units          CurriculumUnit[]
   enrollments    CourseEnrollment[]
@@ -140,6 +153,7 @@ model Course {
 
   @@index([departmentId])
   @@index([code])
+  @@index([facultyId])
 }
 
 model CurriculumUnit {

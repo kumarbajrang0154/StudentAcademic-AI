@@ -2,42 +2,41 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard,
+  AlertTriangle,
   Users,
   BookOpen,
-  Shield,
-  Building,
+  TrendingUp,
+  Award,
   LogOut,
   GraduationCap,
   Loader2,
   Menu,
   X,
-  FileText,
-  Sliders,
+  Building,
 } from "lucide-react";
 
-interface AdminShellProps {
+interface HodShellProps {
   children: React.ReactNode;
 }
 
-export function AdminShell({ children }: AdminShellProps) {
+export function HodShell({ children }: HodShellProps) {
   const { user, isLoading, logout } = useAuth();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const isAuthorizedRole = user?.role === "ADMIN";
+  const isAuthorizedRole = user?.role === "HOD" || user?.role === "ADMIN";
 
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
         const next = encodeURIComponent(pathname);
         router.push(`/login?next=${next}`);
-      } else if (user.role === "HOD") {
-        router.push("/hod/dashboard");
       } else if (user.role === "STUDENT") {
         router.push("/student/dashboard");
       } else if (user.role === "FACULTY") {
@@ -58,41 +57,58 @@ export function AdminShell({ children }: AdminShellProps) {
     );
   }
 
+  const isAdmin = user.role === "ADMIN";
+  const deptParam = searchParams.get("departmentId");
+  const querySuffix = isAdmin && deptParam ? `?departmentId=${encodeURIComponent(deptParam)}` : "";
+
   const navItems = [
     {
-      href: "/admin/dashboard",
-      label: "System Overview",
+      href: `/hod/dashboard${querySuffix}`,
+      basePath: "/hod/dashboard",
+      label: "Overview & Risk",
       icon: LayoutDashboard,
     },
     {
-      href: "/admin/users",
-      label: "Users & Access",
+      href: `/hod/escalations${querySuffix}`,
+      basePath: "/hod/escalations",
+      label: "Escalation Queue",
+      icon: AlertTriangle,
+    },
+    {
+      href: `/hod/students${querySuffix}`,
+      basePath: "/hod/students",
+      label: "Student Dossiers",
       icon: Users,
     },
     {
-      href: "/admin/students",
-      label: "Student Enrollments",
-      icon: GraduationCap,
+      href: `/hod/faculty${querySuffix}`,
+      basePath: "/hod/faculty",
+      label: "Faculty Progress",
+      icon: Award,
     },
     {
-      href: "/admin/departments",
-      label: "Departments",
-      icon: Building,
-    },
-    {
-      href: "/admin/courses",
-      label: "Courses & Faculty",
+      href: `/hod/courses${querySuffix}`,
+      basePath: "/hod/courses",
+      label: "Courses & Compliance",
       icon: BookOpen,
     },
     {
-      href: "/admin/audit",
-      label: "Audit Trail",
-      icon: FileText,
+      href: `/hod/accreditation${querySuffix}`,
+      basePath: "/hod/accreditation",
+      label: "Accreditation (OBE)",
+      icon: Award,
     },
     {
-      href: "/admin/settings",
-      label: "System Settings",
-      icon: Sliders,
+      href: `/hod/reports${querySuffix}`,
+      basePath: "/hod/reports",
+      label: "Reports & Exports",
+      icon: TrendingUp,
+    },
+    {
+      href: `/hod/efficacy${querySuffix}`,
+      basePath: "/hod/efficacy",
+      label: "Intervention Efficacy",
+      icon: TrendingUp,
     },
   ];
 
@@ -102,29 +118,29 @@ export function AdminShell({ children }: AdminShellProps) {
       <aside className="hidden md:flex flex-col w-64 border-r border-slate-800/80 bg-slate-950/70 backdrop-blur-xl shrink-0 min-h-screen sticky top-0 h-screen z-40">
         <div className="p-6 border-b border-slate-800/60 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-lg shadow-indigo-500/20">
-              <Shield className="w-5 h-5" />
+            <div className="p-2.5 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 text-white shadow-lg shadow-sky-500/20">
+              <GraduationCap className="w-5 h-5" />
             </div>
             <div>
               <span className="font-bold text-sm tracking-tight text-white block">
-                ADMIN CONSOLE
+                HOD PORTAL
               </span>
-              <span className="text-[10px] text-indigo-400 font-medium tracking-wider uppercase block">
-                Institutional Control
+              <span className="text-[10px] text-sky-400 font-medium tracking-wider uppercase block">
+                Academic Governance
               </span>
             </div>
           </div>
         </div>
 
-        {/* System Scope Chip */}
-        <div className="mx-4 mt-4 p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-500/20 flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+        {/* Locked Department Chip */}
+        <div className="mx-4 mt-4 p-2.5 rounded-lg bg-sky-950/30 border border-sky-500/20 flex items-center gap-2">
+          <Building className="w-4 h-4 text-sky-400 shrink-0" />
           <div className="truncate">
             <div className="text-[11px] font-semibold text-slate-200 truncate">
-              Entire Institution
+              {isAdmin ? "Institutional Scope" : "Computer Science & Eng"}
             </div>
-            <div className="text-[10px] text-indigo-400 font-medium">
-              System Administrator Scope
+            <div className="text-[10px] text-sky-400 font-medium">
+              {isAdmin ? "Admin Support Mode" : "Locked to Department"}
             </div>
           </div>
         </div>
@@ -133,14 +149,14 @@ export function AdminShell({ children }: AdminShellProps) {
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+            const isActive = pathname === item.basePath || pathname.startsWith(item.basePath + "/");
             return (
               <Link
-                key={item.href}
+                key={item.basePath}
                 href={item.href}
                 className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all group ${
                   isActive
-                    ? "bg-indigo-600/15 text-indigo-300 border border-indigo-500/30 shadow-sm shadow-indigo-950"
+                    ? "bg-sky-600/15 text-sky-300 border border-sky-500/30 shadow-sm shadow-sky-950"
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60"
                 }`}
               >
@@ -148,7 +164,7 @@ export function AdminShell({ children }: AdminShellProps) {
                   <Icon
                     className={`w-4 h-4 transition-colors ${
                       isActive
-                        ? "text-indigo-400"
+                        ? "text-sky-400"
                         : "text-slate-500 group-hover:text-slate-300"
                     }`}
                   />
@@ -163,7 +179,7 @@ export function AdminShell({ children }: AdminShellProps) {
         <div className="p-4 border-t border-slate-800/60 bg-slate-950/40">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 truncate">
-              <div className="w-8 h-8 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xs font-semibold text-indigo-300">
+              <div className="w-8 h-8 rounded-full bg-sky-600/20 border border-sky-500/30 flex items-center justify-center text-xs font-semibold text-sky-300">
                 {user.name.charAt(0)}
               </div>
               <div className="truncate">
@@ -189,11 +205,11 @@ export function AdminShell({ children }: AdminShellProps) {
       {/* Mobile Top Header */}
       <header className="md:hidden border-b border-slate-800 bg-slate-950/90 backdrop-blur-md p-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-indigo-600 text-white">
-            <Shield className="w-4 h-4" />
+          <div className="p-1.5 rounded-lg bg-sky-600 text-white">
+            <GraduationCap className="w-4 h-4" />
           </div>
           <span className="font-bold text-sm tracking-tight text-white">
-            ADMIN CONSOLE
+            HOD PORTAL
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -209,20 +225,20 @@ export function AdminShell({ children }: AdminShellProps) {
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
         <div className="md:hidden fixed inset-x-0 top-[57px] bg-slate-950/95 border-b border-slate-800 p-4 z-40 space-y-2 backdrop-blur-xl">
-          <div className="p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-500/20 text-xs text-indigo-300 mb-2">
-            System Administrator Scope (All Departments)
+          <div className="p-2.5 rounded-lg bg-sky-950/30 border border-sky-500/20 text-xs text-sky-300 mb-2">
+            Department Scope: Computer Science & Engineering
           </div>
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.basePath;
             return (
               <Link
-                key={item.href}
+                key={item.basePath}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium ${
                   isActive
-                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30"
+                    ? "bg-sky-600/20 text-sky-300 border border-sky-500/30"
                     : "text-slate-400 hover:bg-slate-900 text-slate-200"
                 }`}
               >

@@ -1,930 +1,450 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import {
+  Shield,
+  Users,
+  GraduationCap,
+  Building,
+  BookOpen,
   AlertTriangle,
-  Calendar,
-  CheckCircle2,
-  Clock,
-  Info,
+  Play,
   RefreshCw,
-  Send,
+  FileText,
+  CheckCircle,
+  Database,
+  ArrowRight,
+  Activity,
   Loader2,
-  ShieldAlert,
-  Layers,
+  CheckCircle2,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ReferenceLine,
-  BarChart,
-  Bar,
-} from "recharts";
 
-interface KPI {
-  value: number;
-  unit: string;
-  sampleSize: number;
-  definition: string;
-  deltaVs7Days: number | null;
-}
-
-interface OverviewData {
-  departmentScope?: string;
-  kpis: {
-    retentionRiskIndex?: KPI;
-    projectedDebarments?: KPI;
-    curriculumBottlenecks?: KPI;
-    interventionSuccessRate?: KPI;
-    markEntryCompliance?: KPI;
+interface SystemOverviewData {
+  health: {
+    database: string;
+    timestamp: string;
   };
-  attendanceTrend14Days: Array<{
-    date: string;
-    rate?: number;
-    minimumTarget?: number;
-    [key: string]: string | number | undefined;
-  }>;
-  courseRiskDistribution: Array<{
-    courseCode?: string;
-    course?: string;
-    courseName?: string;
-    name?: string;
-    CRITICAL?: number;
-    critical?: number;
-    HIGH?: number;
-    MEDIUM?: number;
-    moderate?: number;
-    LOW?: number;
-    safe?: number;
-  }>;
-  escalationsQueue: Array<{
-    studentId: string;
-    name: string;
-    email: string;
-    department?: string;
-    criticalCourseCount: number;
-    riskDrivers?: string[];
-    riskDriverTags?: string[];
-    caseStatus?: string;
-    severity?: string;
-    caseId?: string | null;
-    dispatchedAt?: string | null;
-    activeCase?: {
-      id?: string;
-      tier?: number;
-      status: string;
-      severity: string;
-      dispatchedAt?: string | null;
+  counts: {
+    byRole: {
+      STUDENT: { active: number; inactive: number; total: number };
+      FACULTY: { active: number; inactive: number; total: number };
+      MENTOR: { active: number; inactive: number; total: number };
+      HOD: { active: number; inactive: number; total: number };
+      ADMIN: { active: number; inactive: number; total: number };
+    };
+    totalUsers: number;
+    activeUsers: number;
+    departments: number;
+    courses: number;
+    enrollments: number;
+    openEscalations: number;
+  };
+  lastAnalysisRun: {
+    id: string;
+    triggeredAt: string;
+    completedAt?: string;
+    status: string;
+    studentsEvaluated?: number;
+    alertsGenerated?: number;
+    durationMs?: number;
+  } | null;
+  recentAuditEntries: Array<{
+    id: string;
+    entity: string;
+    entityId: string;
+    action: string;
+    justification: string | null;
+    createdAt: string;
+    modifiedBy: {
+      id: string;
+      name: string;
+      email: string;
+      role: string;
     } | null;
   }>;
 }
 
-interface JobStatusData {
-  id: string;
-  status: string;
-  targetCount?: number;
-  completedCount?: number;
-  notificationsCount?: number;
-  deduplicated?: boolean;
-  result?: Record<string, unknown> | null;
-  error?: string | null;
-}
-
 export default function AdminDashboardPage() {
-  const [data, setData] = useState<OverviewData | null>(null);
+  const [data, setData] = useState<SystemOverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
-  // Escalation Modal State
-  const [escalateModalOpen, setEscalateModalOpen] = useState(false);
-  const [targetStudentId, setTargetStudentId] = useState<string>("");
-  const [escalateReason, setEscalateReason] = useState("");
-  const [escalateSeverity, setEscalateSeverity] = useState<"STANDARD" | "SEVERE">("STANDARD");
-  const [selectedChannels, setSelectedChannels] = useState<string[]>(["IN_APP", "EMAIL"]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [pollingJobId, setPollingJobId] = useState<string | null>(null);
-  const [jobStatus, setJobStatus] = useState<JobStatusData | null>(null);
-  const [dispatchSuccess, setDispatchSuccess] = useState<boolean>(false);
+  // Analysis run trigger
+  const [isRunningAnalysis, setIsRunningAnalysis] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
 
-  // Continuous Analysis State
-  const [lastRun, setLastRun] = useState<{
-    id: string;
-    startedAt: string;
-    finishedAt?: string;
-    status: string;
-    enrollmentsProcessed: number;
-    newWarnings: number;
-    newCriticals: number;
-  } | null>(null);
-  const [runningAnalysis, setRunningAnalysis] = useState(false);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const res = await apiFetch("/api/v1/admin/overview");
       if (!res.ok) {
-        throw new Error(`Failed to load institutional overview (${res.status})`);
+        throw new Error(`Failed to load system overview (${res.status})`);
       }
       const json = await res.json();
-      const attendanceTrend = (json.charts?.attendanceTrend || []).map(
-        (item: Record<string, unknown>) => {
-          if (typeof item.rate === "number") return item as { date: string; rate: number; minimumTarget: number };
-          let total = 0;
-          let count = 0;
-          Object.entries(item).forEach(([k, v]) => {
-            if (k !== "date" && typeof v === "number") {
-              total += v;
-              count++;
-            }
-          });
-          return {
-            ...item,
-            date: String(item.date || ""),
-            rate: count > 0 ? Math.round(total / count) : 100,
-            minimumTarget: 75,
-          };
-        },
-      );
-
-      const courseRisk = (json.charts?.riskDistribution || []).map(
-        (c: Record<string, unknown>) => ({
-          courseCode: String(c.courseCode || c.course || "COURSE"),
-          courseName: String(c.courseName || c.name || ""),
-          LOW: typeof c.LOW === "number" ? c.LOW : typeof c.safe === "number" ? c.safe : 0,
-          MEDIUM: typeof c.MEDIUM === "number" ? c.MEDIUM : typeof c.moderate === "number" ? c.moderate : 0,
-          HIGH: typeof c.HIGH === "number" ? c.HIGH : 0,
-          CRITICAL: typeof c.CRITICAL === "number" ? c.CRITICAL : typeof c.critical === "number" ? c.critical : 0,
-        }),
-      );
-
-      setData({
-        ...json,
-        attendanceTrend14Days: attendanceTrend,
-        courseRiskDistribution: courseRisk,
-        escalationsQueue: json.escalationsQueue || [],
-      });
-
-      // Fetch last analysis run
-      try {
-        const runRes = await apiFetch("/api/v1/admin/analysis/runs");
-        if (runRes.ok) {
-          const runJson = await runRes.json();
-          if (runJson.runs && runJson.runs.length > 0) {
-            setLastRun(runJson.runs[0]);
-          }
-        }
-      } catch {
-        // Non-critical
-      }
+      setData(json);
     } catch (err: unknown) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Failed to load dashboard data");
+      setError(err instanceof Error ? err.message : "Failed to load system overview");
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleRunAnalysisNow = async () => {
-    setRunningAnalysis(true);
-    try {
-      const res = await apiFetch("/api/v1/admin/analysis/run", { method: "POST" });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.message || "Continuous analysis failed");
-      }
-      const json = await res.json();
-      setLastRun(json.result);
-      alert(`Continuous Analysis Completed!\n• Enrollments Processed: ${json.result.enrollmentsProcessed}\n• New Attendance Warnings: ${json.result.newWarnings}\n• New Critical Alerts: ${json.result.newCriticals}`);
-      await fetchData();
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Analysis run failed");
-    } finally {
-      setRunningAnalysis(false);
-    }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  // Poll Dispatch Job
-  useEffect(() => {
-    let interval: NodeJS.Timeout | undefined;
-    if (pollingJobId) {
-      interval = setInterval(async () => {
-        try {
-          const res = await apiFetch(`/api/v1/admin/jobs/${pollingJobId}`);
-          if (res.ok) {
-            const result = await res.json();
-            setJobStatus(result.job);
-            if (result.job.status === "DONE" || result.job.status === "FAILED") {
-              clearInterval(interval);
-              setIsSubmitting(false);
-              if (result.job.status === "DONE") {
-                setDispatchSuccess(true);
-                fetchData();
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Job poll error", err);
-        }
-      }, 700);
-    }
-    return () => clearInterval(interval);
-  }, [pollingJobId]);
-
-  const handleOpenEscalateModal = (studentId?: string) => {
-    if (studentId) setTargetStudentId(studentId);
-    else if (data?.escalationsQueue && data.escalationsQueue.length > 0) {
-      setTargetStudentId(data.escalationsQueue[0]!.studentId);
-    }
-    setEscalateReason("");
-    setEscalateSeverity("STANDARD");
-    setSelectedChannels(["IN_APP", "EMAIL"]);
-    setPollingJobId(null);
-    setJobStatus(null);
-    setDispatchSuccess(false);
-    setEscalateModalOpen(true);
-  };
-
-  const handleChannelToggle = (channel: string) => {
-    setSelectedChannels((prev) =>
-      prev.includes(channel) ? prev.filter((c) => c !== channel) : [...prev, channel],
-    );
-  };
-
-  const handleSubmitEscalation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!targetStudentId) return;
-
-    setIsSubmitting(true);
-    setJobStatus(null);
-    setDispatchSuccess(false);
-
+  const handleRunAnalysis = async () => {
     try {
-      const res = await apiFetch("/api/v1/admin/escalate", {
+      setIsRunningAnalysis(true);
+      setAnalysisResult(null);
+      const res = await apiFetch("/api/v1/admin/analysis/run", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: targetStudentId,
-          reason: escalateReason || "Institutional academic intervention required.",
-          severity: escalateSeverity,
-          triggerChannels: selectedChannels,
-        }),
       });
-
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.message || "Failed to trigger escalation");
+        throw new Error(errJson.message || "Failed to trigger analysis run");
       }
-
-      const resData = await res.json();
-      setPollingJobId(resData.jobId);
+      const json = await res.json();
+      setAnalysisResult(
+        `Analysis completed successfully! ${json.studentsEvaluated ?? 0} students evaluated, ${
+          json.alertsGenerated ?? 0
+        } alerts generated.`,
+      );
+      await fetchData();
     } catch (err: unknown) {
-      console.error(err);
-      alert(err instanceof Error ? err.message : "Escalation failed");
-      setIsSubmitting(false);
+      setAnalysisResult(
+        `Error: ${err instanceof Error ? err.message : "Failed to run analysis"}`,
+      );
+    } finally {
+      setIsRunningAnalysis(false);
     }
   };
 
-  if (loading && !data) {
-    return (
-      <div className="p-8 flex items-center justify-center min-h-[60vh] text-slate-400">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mr-3" />
-        <span>Loading institutional telemetry...</span>
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <div className="p-8">
-        <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-300 max-w-xl">
-          <div className="flex items-center gap-2 font-bold mb-2">
-            <ShieldAlert className="w-5 h-5 text-rose-400" />
-            Telemetry Error
-          </div>
-          <p className="text-sm">{error || "Failed to retrieve telemetry data."}</p>
-          <button
-            onClick={fetchData}
-            className="mt-4 px-4 py-2 bg-rose-600/30 hover:bg-rose-600/40 border border-rose-500/30 rounded-lg text-xs font-semibold text-white transition"
-          >
-            Retry Request
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const kpis = data.kpis;
-
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
+    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <div className="p-2.5 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/20">
+              <Shield className="w-5 h-5" />
+            </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Institutional Risk & Governance
+              Institutional Admin Console
             </h1>
             <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-              SCR-04
+              Full System Access
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-400">
-            Analysis runs after every attendance/marks save and daily. Automated retention telemetry, compliance tracking, and escalation dispatch.
+            System health, user directory lifecycle, department governance, and scheduled telemetry.
           </p>
         </div>
 
+        {/* Top actions & DB health */}
         <div className="flex flex-wrap items-center gap-3">
-          {lastRun && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-300">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  lastRun.status === "COMPLETED" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
-                }`}
-              />
-              <span>
-                Last analysis run:{" "}
-                <strong className="text-white">
-                  {new Date(lastRun.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </strong>{" "}
-                <span className="text-slate-500">({lastRun.status})</span> • {lastRun.enrollmentsProcessed} processed
-              </span>
-            </div>
-          )}
-
-          <button
-            onClick={handleRunAnalysisNow}
-            disabled={runningAnalysis}
-            className="px-3.5 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition disabled:opacity-50"
-            title="Run continuous analysis across all courses now"
-          >
-            {runningAnalysis ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-            ) : (
-              <RefreshCw className="w-3.5 h-3.5" />
-            )}
-            Run Analysis Now
-          </button>
+          {/* DB Health Pill */}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs">
+            <Database className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-slate-400">Database:</span>
+            <span className="font-semibold text-emerald-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Connected
+            </span>
+          </div>
 
           <button
             onClick={fetchData}
-            className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-xl text-xs flex items-center gap-2 transition"
-            title="Refresh Telemetry"
+            disabled={loading}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-300 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-850 hover:text-white transition disabled:opacity-50"
           >
-            <RefreshCw className="w-4 h-4" />
-            <span className="hidden sm:inline">Refresh</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
           </button>
+        </div>
+      </div>
+
+      {/* Error state with retry */}
+      {error && (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+            <span className="text-xs text-rose-200">{error}</span>
+          </div>
           <button
-            onClick={() => handleOpenEscalateModal()}
-            className="px-4 py-2.5 bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 flex items-center gap-2 transition"
+            onClick={fetchData}
+            className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg text-xs font-medium transition"
           >
-            <AlertTriangle className="w-4 h-4" />
-            Trigger Tier-1 Escalation
+            Retry
           </button>
         </div>
-      </div>
+      )}
 
-      {/* 5 KPI Metric Tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* KPI 1: Retention Risk Index */}
-        <div className="p-4 bg-slate-900/60 border border-slate-800/80 rounded-xl relative group">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Retention Risk</span>
-            <button
-              onMouseEnter={() => setActiveTooltip("kpi-risk")}
-              onMouseLeave={() => setActiveTooltip(null)}
-              className="text-slate-500 hover:text-slate-300"
-            >
-              <Info className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-white">
-              {kpis.retentionRiskIndex?.value ?? 0}%
-            </span>
-            <span className="text-xs text-slate-400">cohort</span>
-          </div>
-          <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
-            <span className="text-slate-400">Δ 7d:</span>
-            <span className="text-slate-400 font-mono">
-              {kpis.retentionRiskIndex?.deltaVs7Days !== null && kpis.retentionRiskIndex?.deltaVs7Days !== undefined
-                ? `${kpis.retentionRiskIndex.deltaVs7Days}%`
-                : "n/a"}
-            </span>
-            <span className="text-slate-400 ml-auto font-mono">N={kpis.retentionRiskIndex?.sampleSize ?? 0}</span>
-          </div>
-          {activeTooltip === "kpi-risk" && (
-            <div className="absolute top-10 right-2 z-50 p-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 w-56 shadow-xl">
-              {kpis.retentionRiskIndex?.definition || "Retention Risk Index"}
-            </div>
-          )}
+      {/* Loading state */}
+      {loading && !data && (
+        <div className="p-16 flex flex-col items-center justify-center text-slate-400 gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+          <span className="text-xs">Loading institutional telemetry...</span>
         </div>
+      )}
 
-        {/* KPI 2: Projected Debarments */}
-        <div className="p-4 bg-slate-900/60 border border-slate-800/80 rounded-xl relative group">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-rose-300">
-              Debarment Risk
-            </span>
-            <button
-              onMouseEnter={() => setActiveTooltip("kpi-debar")}
-              onMouseLeave={() => setActiveTooltip(null)}
-              className="text-slate-500 hover:text-slate-300"
-            >
-              <Info className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-rose-400">
-              {kpis.projectedDebarments?.value ?? 0}
-            </span>
-            <span className="text-xs text-slate-400">students</span>
-          </div>
-          <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
-            <span className="text-slate-400">Below 75%:</span>
-            <span className="text-rose-400 font-semibold">{kpis.projectedDebarments?.value ?? 0}</span>
-            <span className="text-slate-400 ml-auto font-mono">N={kpis.projectedDebarments?.sampleSize ?? 0}</span>
-          </div>
-          {activeTooltip === "kpi-debar" && (
-            <div className="absolute top-10 right-2 z-50 p-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 w-56 shadow-xl">
-              {kpis.projectedDebarments?.definition || "Projected Debarments"}
-            </div>
-          )}
-        </div>
-
-        {/* KPI 3: Curriculum Bottlenecks */}
-        <div className="p-4 bg-slate-900/60 border border-slate-800/80 rounded-xl relative group">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-amber-300">
-              Bottlenecks
-            </span>
-            <button
-              onMouseEnter={() => setActiveTooltip("kpi-bottle")}
-              onMouseLeave={() => setActiveTooltip(null)}
-              className="text-slate-500 hover:text-slate-300"
-            >
-              <Info className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-amber-400">
-              {kpis.curriculumBottlenecks?.value ?? 0}
-            </span>
-            <span className="text-xs text-slate-400">course units</span>
-          </div>
-          <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
-            <span className="text-slate-400">&gt;40% fail rate</span>
-            <span className="text-slate-400 ml-auto font-mono">N={kpis.curriculumBottlenecks?.sampleSize ?? 0}</span>
-          </div>
-          {activeTooltip === "kpi-bottle" && (
-            <div className="absolute top-10 right-2 z-50 p-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 w-56 shadow-xl">
-              {kpis.curriculumBottlenecks?.definition || "Curriculum Bottlenecks"}
-            </div>
-          )}
-        </div>
-
-        {/* KPI 4: Intervention Success Rate */}
-        <div className="p-4 bg-slate-900/60 border border-slate-800/80 rounded-xl relative group">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
-              Success Rate
-            </span>
-            <button
-              onMouseEnter={() => setActiveTooltip("kpi-success")}
-              onMouseLeave={() => setActiveTooltip(null)}
-              className="text-slate-500 hover:text-slate-300"
-            >
-              <Info className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-emerald-400">
-              {kpis.interventionSuccessRate?.value !== null && kpis.interventionSuccessRate?.value !== undefined
-                ? `${kpis.interventionSuccessRate.value}%`
-                : "n/a"}
-            </span>
-            <span className="text-xs text-slate-400">recovery</span>
-          </div>
-          <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
-            <span className="text-slate-400">Target: &gt;70%</span>
-            <span className="text-slate-400 ml-auto font-mono">N={kpis.interventionSuccessRate?.sampleSize ?? 0}</span>
-          </div>
-          {activeTooltip === "kpi-success" && (
-            <div className="absolute top-10 right-2 z-50 p-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 w-56 shadow-xl">
-              {kpis.interventionSuccessRate?.definition || "Intervention Success Rate"}
-            </div>
-          )}
-        </div>
-
-        {/* KPI 5: Mark Entry Compliance */}
-        <div className="p-4 bg-slate-900/60 border border-slate-800/80 rounded-xl relative group">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-cyan-300">
-              Mark Compliance
-            </span>
-            <button
-              onMouseEnter={() => setActiveTooltip("kpi-mark")}
-              onMouseLeave={() => setActiveTooltip(null)}
-              className="text-slate-500 hover:text-slate-300"
-            >
-              <Info className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-extrabold text-cyan-400">
-              {kpis.markEntryCompliance?.value !== null && kpis.markEntryCompliance?.value !== undefined
-                ? `${kpis.markEntryCompliance.value}%`
-                : "n/a"}
-            </span>
-            <span className="text-xs text-slate-400">submitted</span>
-          </div>
-          <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-1.5">
-            <span className="text-slate-400">Faculty timely</span>
-            <span className="text-slate-400 ml-auto font-mono">N={kpis.markEntryCompliance?.sampleSize ?? 0}</span>
-          </div>
-          {activeTooltip === "kpi-mark" && (
-            <div className="absolute top-10 right-2 z-50 p-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-300 w-56 shadow-xl">
-              {kpis.markEntryCompliance?.definition || "Mark Entry Compliance"}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Two Column Section: Attendance Trend & Course Risk Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Attendance Trend (14-day) with 75% Statutory Line */}
-        <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-xl">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-indigo-400" />
-                14-Day Attendance Telemetry
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                Departmental daily average vs statutory 75% debarment threshold
-              </p>
-            </div>
-            <span className="text-[11px] font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded">
-              Threshold: 75%
-            </span>
-          </div>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={data.attendanceTrend14Days}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: "#64748b", fontSize: 10 }}
-                  tickFormatter={(val) => val.slice(5)}
-                />
-                <YAxis
-                  domain={[50, 100]}
-                  tick={{ fill: "#64748b", fontSize: 10 }}
-                  unit="%"
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#090D16",
-                    borderColor: "#334155",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                <ReferenceLine
-                  y={75}
-                  stroke="#f43f5e"
-                  strokeDasharray="4 4"
-                  label={{
-                    value: "75% Debarment Limit",
-                    fill: "#f43f5e",
-                    fontSize: 10,
-                    position: "insideTopLeft",
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="rate"
-                  name="Attendance %"
-                  stroke="#6366f1"
-                  strokeWidth={2.5}
-                  dot={{ r: 3, fill: "#6366f1" }}
-                  activeDot={{ r: 5 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Stacked Bar Chart: Course Risk Distribution */}
-        <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-xl">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <Layers className="w-4 h-4 text-amber-400" />
-                Course Risk Distribution
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                Enrollment risk segmentation across registered courses
-              </p>
-            </div>
-            <span className="text-[11px] font-semibold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
-              {data.courseRiskDistribution.length} Courses
-            </span>
-          </div>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={data.courseRiskDistribution}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="courseCode" tick={{ fill: "#64748b", fontSize: 10 }} />
-                <YAxis tick={{ fill: "#64748b", fontSize: 10 }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#090D16",
-                    borderColor: "#334155",
-                    borderRadius: "8px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                <Bar dataKey="LOW" name="Low Risk" stackId="a" fill="#10b981" />
-                <Bar dataKey="MEDIUM" name="Medium Risk" stackId="a" fill="#3b82f6" />
-                <Bar dataKey="HIGH" name="High Risk" stackId="a" fill="#f59e0b" />
-                <Bar dataKey="CRITICAL" name="Critical Risk" stackId="a" fill="#ef4444" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* Escalation Queue Table */}
-      <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-          <div>
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-400" />
-              Tier-1 Escalation Queue
-            </h2>
-            <p className="text-xs text-slate-400">
-              Students exhibiting 3+ critical courses or active escalation mandates
-            </p>
-          </div>
-          <span className="text-xs font-semibold px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-lg self-start sm:self-auto">
-            {data.escalationsQueue.length} Flagged Case(s)
-          </span>
-        </div>
-
-        {data.escalationsQueue.length === 0 ? (
-          <div className="py-12 text-center text-slate-500 text-xs">
-            <CheckCircle2 className="w-8 h-8 text-emerald-500/50 mx-auto mb-2" />
-            No pending escalation cases in active department scope.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950/60 text-slate-400 uppercase text-[10px] font-semibold border-b border-slate-800">
-                <tr>
-                  <th className="py-3 px-4">Student</th>
-                  <th className="py-3 px-3">Critical Courses</th>
-                  <th className="py-3 px-3">Primary Risk Drivers</th>
-                  <th className="py-3 px-3">Escalation Status</th>
-                  <th className="py-3 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {(data.escalationsQueue || []).map((item) => {
-                  const drivers = item.riskDrivers || item.riskDriverTags || [];
-                  const activeCase = item.activeCase || (item.caseStatus && item.caseStatus !== "NONE" ? {
-                    id: item.caseId || item.studentId,
-                    status: item.caseStatus,
-                    severity: item.severity || "STANDARD",
-                  } : null);
-
-                  return (
-                    <tr key={item.studentId} className="hover:bg-slate-800/40 transition">
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-white">{item.name}</div>
-                        <div className="text-[11px] text-slate-400 font-mono">{item.email}</div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="inline-flex items-center gap-1 font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded text-[11px]">
-                          {item.criticalCourseCount} Critical
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex flex-wrap gap-1">
-                          {drivers.length > 0 ? (
-                            drivers.map((driver, idx) => (
-                              <span
-                                key={idx}
-                                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300"
-                              >
-                                {driver}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-[10px] text-slate-500 italic">Critical across courses</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        {activeCase ? (
-                          <div className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300">
-                            <Clock className="w-3 h-3" />
-                            {activeCase.status} ({activeCase.severity})
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">Eligible for Tier-1</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => handleOpenEscalateModal(item.studentId)}
-                          className="px-3 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-semibold inline-flex items-center gap-1.5 transition"
-                        >
-                          <Send className="w-3 h-3" />
-                          Escalate
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Trigger Tier-1 Escalation Modal */}
-      {escalateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 text-slate-200 shadow-2xl relative">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-1">
-              <AlertTriangle className="w-5 h-5 text-amber-400" />
-              Trigger Tier-1 Escalation Dispatch
-            </h3>
-            <p className="text-xs text-slate-400 mb-5">
-              Dispatches multi-channel alerts (Mentor, HOD, Welfare Cell) and reserves calendar hold.
-            </p>
-
-            {dispatchSuccess ? (
-              <div className="space-y-4 py-4 text-center">
-                <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
-                  <CheckCircle2 className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-white text-base">Escalation Successfully Dispatched</h4>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Notifications generated: {jobStatus?.notificationsCount ?? 3}. Calendar hold scheduled: Yes.
-                  </p>
-                  {jobStatus?.deduplicated && (
-                    <span className="inline-block mt-2 text-[11px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      Note: Dispatched earlier within 24h window (idempotent hold reused)
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => setEscalateModalOpen(false)}
-                  className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold transition"
-                >
-                  Close & View Telemetry
-                </button>
+      {data && (
+        <>
+          {/* High Level Entity Overview Grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl">
+              <div className="flex items-center justify-between text-slate-400 mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider">Total Users</span>
+                <Users className="w-4 h-4 text-indigo-400" />
               </div>
-            ) : isSubmitting ? (
-              <div className="py-8 text-center space-y-3">
-                <Loader2 className="w-8 h-8 animate-spin text-amber-400 mx-auto" />
-                <p className="text-sm font-semibold text-white">
-                  Executing Synchronous Dispatch & Calendar Hold...
-                </p>
+              <div className="text-2xl font-bold text-white">{data.counts.totalUsers}</div>
+              <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
+                <span className="text-emerald-400 font-medium">{data.counts.activeUsers} active</span>
+                <span>•</span>
+                <span className="text-slate-500">{data.counts.totalUsers - data.counts.activeUsers} deactivated</span>
+              </div>
+            </div>
+
+            <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl">
+              <div className="flex items-center justify-between text-slate-400 mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider">Departments</span>
+                <Building className="w-4 h-4 text-sky-400" />
+              </div>
+              <div className="text-2xl font-bold text-white">{data.counts.departments}</div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Academic programs & governance units
+              </div>
+            </div>
+
+            <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl">
+              <div className="flex items-center justify-between text-slate-400 mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider">Active Enrollments</span>
+                <GraduationCap className="w-4 h-4 text-violet-400" />
+              </div>
+              <div className="text-2xl font-bold text-white">{data.counts.enrollments}</div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Across {data.counts.courses} active courses
+              </div>
+            </div>
+
+            <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-2xl">
+              <div className="flex items-center justify-between text-slate-400 mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider">Open Escalations</span>
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+              </div>
+              <div className="text-2xl font-bold text-amber-400">{data.counts.openEscalations}</div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Requiring review or intervention
+              </div>
+            </div>
+          </div>
+
+          {/* Role Distribution Matrix */}
+          <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center gap-2">
+                  <Users className="w-4 h-4 text-indigo-400" />
+                  User Accounts by Role
+                </h3>
                 <p className="text-xs text-slate-400">
-                  Target: &lt; 1.5s serverless execution window
+                  Breakdown of active and inactive accounts in the institution.
                 </p>
               </div>
-            ) : (
-              <form onSubmit={handleSubmitEscalation} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    Select Target Student
-                  </label>
-                  <select
-                    value={targetStudentId}
-                    onChange={(e) => setTargetStudentId(e.target.value)}
-                    required
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+              <Link
+                href="/admin/users"
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 transition"
+              >
+                Manage Directory <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {(
+                [
+                  { role: "STUDENT", label: "Students", icon: GraduationCap, color: "sky" },
+                  { role: "FACULTY", label: "Faculty", icon: BookOpen, color: "violet" },
+                  { role: "MENTOR", label: "Mentors", icon: Users, color: "emerald" },
+                  { role: "HOD", label: "HODs", icon: Building, color: "amber" },
+                  { role: "ADMIN", label: "Admins", icon: Shield, color: "rose" },
+                ] as const
+              ).map(({ role, label, icon: RoleIcon }) => {
+                const count = data.counts.byRole[role] || { active: 0, inactive: 0, total: 0 };
+                return (
+                  <div
+                    key={role}
+                    className="p-3.5 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-1"
                   >
-                    {(data.escalationsQueue || []).map((s) => (
-                      <option key={s.studentId} value={s.studentId}>
-                        {s.name} ({s.email}) — {s.criticalCourseCount} Critical Courses
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                      Severity Tier
-                    </label>
-                    <select
-                      value={escalateSeverity}
-                      onChange={(e) => setEscalateSeverity(e.target.value as "STANDARD" | "SEVERE")}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                    >
-                      <option value="STANDARD">STANDARD (Tier-1 Standard)</option>
-                      <option value="SEVERE">SEVERE (Immediate Hold)</option>
-                    </select>
+                    <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
+                      <RoleIcon className="w-3.5 h-3.5" />
+                      <span>{label}</span>
+                    </div>
+                    <div className="text-lg font-bold text-white">{count.total}</div>
+                    <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <span className="text-emerald-400">{count.active} active</span>
+                      {count.inactive > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-rose-400">{count.inactive} inactive</span>
+                        </>
+                      )}
+                    </div>
                   </div>
+                );
+              })}
+            </div>
+          </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                      Target Audience
-                    </label>
-                    <input
-                      type="text"
-                      disabled
-                      value="Mentor + HOD + Welfare Cell"
-                      className="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-400 cursor-not-allowed"
-                    />
-                  </div>
+          {/* Continuous Analysis Engine Card */}
+          <div className="bg-gradient-to-r from-indigo-950/40 to-slate-900/60 border border-indigo-500/20 rounded-2xl p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider mb-1">
+                  <Activity className="w-4 h-4" />
+                  Autonomous Risk Telemetry
                 </div>
+                <h3 className="text-lg font-bold text-white">
+                  Continuous Academic Analysis Engine
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Computes 4-component risk scores, triggers Tier-1 alerts, and flags curriculum bottlenecks.
+                </p>
+              </div>
 
+              <button
+                onClick={handleRunAnalysis}
+                disabled={isRunningAnalysis}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-indigo-600/30 disabled:opacity-50 shrink-0"
+              >
+                {isRunningAnalysis ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4 fill-current" />
+                )}
+                Run Analysis Now
+              </button>
+            </div>
+
+            {analysisResult && (
+              <div
+                className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  analysisResult.startsWith("Error")
+                    ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                    : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                }`}
+              >
+                {analysisResult.startsWith("Error") ? (
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                )}
+                <span>{analysisResult}</span>
+              </div>
+            )}
+
+            {data.lastAnalysisRun && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-800/80 text-xs">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Dispatch Channels
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {["IN_APP", "EMAIL", "SMS", "WHATSAPP"].map((ch) => (
-                      <label
-                        key={ch}
-                        className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                          selectedChannels.includes(ch)
-                            ? "bg-indigo-600/30 text-indigo-200 border-indigo-500/50"
-                            : "bg-slate-950 border-slate-800 text-slate-400"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          className="hidden"
-                          checked={selectedChannels.includes(ch)}
-                          onChange={() => handleChannelToggle(ch)}
-                        />
-                        {ch.replace("_", " ")}
-                      </label>
-                    ))}
-                  </div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Last Execution</span>
+                  <span className="text-slate-300 font-medium">
+                    {new Date(data.lastAnalysisRun.triggeredAt).toLocaleString()}
+                  </span>
                 </div>
-
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    Escalation Justification & Remediation Directive
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={escalateReason}
-                    onChange={(e) => setEscalateReason(e.target.value)}
-                    placeholder="Enter academic justification, observations, or specific remediation instructions for mentor..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                  />
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Students Scanned</span>
+                  <span className="text-slate-300 font-bold">
+                    {data.lastAnalysisRun.studentsEvaluated ?? "All cohorts"}
+                  </span>
                 </div>
-
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setEscalateModalOpen(false)}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 flex items-center gap-1.5 transition"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    Confirm & Dispatch
-                  </button>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Alerts Generated</span>
+                  <span className="text-amber-400 font-bold">
+                    {data.lastAnalysisRun.alertsGenerated ?? 0}
+                  </span>
                 </div>
-              </form>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-semibold">Status</span>
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {data.lastAnalysisRun.status}
+                  </span>
+                </div>
+              </div>
             )}
           </div>
-        </div>
+
+          {/* Recent Audit Trail Stream */}
+          <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-slate-400" />
+                  Recent Audit Trail
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Immutable record of user creation, role modifications, and system interventions.
+                </p>
+              </div>
+              <Link
+                href="/admin/audit"
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 transition"
+              >
+                View Full Audit <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 font-semibold uppercase tracking-wider">
+                    <th className="py-3 px-4">Entity</th>
+                    <th className="py-3 px-4">Action & Justification</th>
+                    <th className="py-3 px-4">Modified By</th>
+                    <th className="py-3 px-4">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                  {data.recentAuditEntries.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-800/30 transition">
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                          {log.entity}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-slate-100">{log.action}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        {log.modifiedBy ? (
+                          <div>
+                            <div className="text-slate-200">{log.modifiedBy.name}</div>
+                            <div className="text-[10px] text-slate-500">{log.modifiedBy.role}</div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-500">System</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 text-[11px] whitespace-nowrap">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                  {data.recentAuditEntries.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-slate-500">
+                        No audit log entries recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

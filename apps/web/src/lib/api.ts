@@ -4,24 +4,46 @@
  * On 401, attempts /auth/refresh once, retries the request, and redirects to /login
  * with session expired message if refresh fails.
  */
+export interface ApiFetchOptions extends RequestInit {
+  timeoutMs?: number;
+}
+
 export async function apiFetch(
   url: string,
-  options: RequestInit = {},
+  options: ApiFetchOptions = {},
 ): Promise<Response> {
+  const { timeoutMs = 15000, ...fetchOptions } = options;
+
+  const controller = new AbortController();
+  let timerId: NodeJS.Timeout | null = null;
+  if (!options.signal) {
+    timerId = setTimeout(() => {
+      controller.abort(new Error(`Request timed out after ${timeoutMs / 1000}s`));
+    }, timeoutMs);
+  }
+
+  const signal = options.signal || controller.signal;
+
   const getToken = () =>
     typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
 
-  const headers = new Headers(options.headers);
+  const headers = new Headers(fetchOptions.headers);
   const currentToken = getToken();
   if (currentToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${currentToken}`);
   }
 
-  let response = await fetch(url, {
-    ...options,
-    credentials: "include",
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...fetchOptions,
+      credentials: "include",
+      headers,
+      signal,
+    });
+  } finally {
+    if (timerId) clearTimeout(timerId);
+  }
 
   // Skip refresh logic for auth endpoints itself to avoid infinite loop
   const isAuthEndpoint =

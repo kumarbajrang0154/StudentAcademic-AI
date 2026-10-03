@@ -40,6 +40,7 @@ export function getRoleHome(userRole?: string): string {
     case "MENTOR":
       return "/mentor/dashboard";
     case "HOD":
+      return "/hod/dashboard";
     case "ADMIN":
       return "/admin/dashboard";
     default:
@@ -58,8 +59,10 @@ export function isPathAllowedForRole(path: string, userRole?: string): boolean {
     case "MENTOR":
       return path.startsWith("/mentor");
     case "HOD":
+      return path.startsWith("/hod");
     case "ADMIN":
-      return path.startsWith("/admin");
+      // ADMIN may access /admin/* and /hod/* (read-only support)
+      return path.startsWith("/admin") || path.startsWith("/hod");
     default:
       return false;
   }

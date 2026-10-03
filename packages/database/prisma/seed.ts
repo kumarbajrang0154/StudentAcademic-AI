@@ -143,6 +143,10 @@ async function main() {
       passwordHash: PASSWORD_HASH,
     },
   });
+  await prisma.department.update({
+    where: { id: department.id },
+    data: { headId: hod.id },
+  });
   console.log(`✓ Created HOD user: ${hod.email}`);
 
   // 4. Faculty Users (2 members)
@@ -361,6 +365,7 @@ async function main() {
         name: cDef.name,
         credits: cDef.credits,
         departmentId: department.id,
+        facultyId: cDef.facultyId,
       },
     });
 

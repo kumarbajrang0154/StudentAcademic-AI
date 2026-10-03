@@ -117,7 +117,7 @@ describe("Module 9: Accreditation, Reports & Continuous Analysis Integration Tes
     it("faculty gets 403 Forbidden on accreditation endpoints", async () => {
       const res = await app.inject({
         method: "GET",
-        url: `/api/v1/admin/accreditation/${cs101Id}`,
+        url: `/api/v1/hod/accreditation/${cs101Id}`,
         headers: { authorization: `Bearer ${faculty1Token}` },
       });
       expect(res.statusCode).toBe(403);
@@ -127,12 +127,12 @@ describe("Module 9: Accreditation, Reports & Continuous Analysis Integration Tes
       const [stuRes, menRes] = await Promise.all([
         app.inject({
           method: "GET",
-          url: `/api/v1/admin/accreditation/${cs101Id}`,
+          url: `/api/v1/hod/accreditation/${cs101Id}`,
           headers: { authorization: `Bearer ${studentToken}` },
         }),
         app.inject({
           method: "GET",
-          url: `/api/v1/admin/reports/attendance?courseId=${cs101Id}`,
+          url: `/api/v1/hod/reports/attendance?courseId=${cs101Id}`,
           headers: { authorization: `Bearer ${mentorToken}` },
         }),
       ]);
@@ -181,7 +181,7 @@ describe("Module 9: Accreditation, Reports & Continuous Analysis Integration Tes
       // Compare with API endpoint result
       const res = await app.inject({
         method: "GET",
-        url: `/api/v1/admin/accreditation/${cs101Id}`,
+        url: `/api/v1/hod/accreditation/${cs101Id}`,
         headers: { authorization: `Bearer ${hodToken}` },
       });
       expect(res.statusCode).toBe(200);
@@ -208,7 +208,7 @@ describe("Module 9: Accreditation, Reports & Continuous Analysis Integration Tes
     it("verifies Program-level PO weighted average calculation across courses", async () => {
       const res = await app.inject({
         method: "GET",
-        url: `/api/v1/admin/accreditation/program?departmentId=${cseDeptId}`,
+        url: `/api/v1/hod/accreditation/program?departmentId=${cseDeptId}`,
         headers: { authorization: `Bearer ${adminToken}` },
       });
       expect(res.statusCode).toBe(200);
@@ -230,7 +230,7 @@ describe("Module 9: Accreditation, Reports & Continuous Analysis Integration Tes
     it("XLSX opens cleanly with ExcelJS, asserts frozen row, headers, and values", async () => {
       const res = await app.inject({
         method: "GET",
-        url: `/api/v1/admin/reports/attendance?courseId=${cs101Id}&format=xlsx`,
+        url: `/api/v1/hod/reports/attendance?courseId=${cs101Id}&format=xlsx`,
         headers: { authorization: `Bearer ${hodToken}` },
       });
 
@@ -267,7 +267,7 @@ describe("Module 9: Accreditation, Reports & Continuous Analysis Integration Tes
     it("PDF generated starts with %PDF, has pages, and valid A4 structure", async () => {
       const res = await app.inject({
         method: "GET",
-        url: `/api/v1/admin/reports/attendance?courseId=${cs101Id}&format=pdf`,
+        url: `/api/v1/hod/reports/attendance?courseId=${cs101Id}&format=pdf`,
         headers: { authorization: `Bearer ${hodToken}` },
       });
 
@@ -288,7 +288,7 @@ describe("Module 9: Accreditation, Reports & Continuous Analysis Integration Tes
     it("CSV has UTF-8 BOM and correct escaping", async () => {
       const res = await app.inject({
         method: "GET",
-        url: `/api/v1/admin/reports/attendance?courseId=${cs101Id}&format=csv`,
+        url: `/api/v1/hod/reports/attendance?courseId=${cs101Id}&format=csv`,
         headers: { authorization: `Bearer ${hodToken}` },
       });
 
@@ -311,7 +311,7 @@ describe("Module 9: Accreditation, Reports & Continuous Analysis Integration Tes
 
       await app.inject({
         method: "GET",
-        url: `/api/v1/admin/reports/marks?courseId=${cs101Id}&format=xlsx`,
+        url: `/api/v1/hod/reports/marks?courseId=${cs101Id}&format=xlsx`,
         headers: { authorization: `Bearer ${hodToken}` },
       });
 
