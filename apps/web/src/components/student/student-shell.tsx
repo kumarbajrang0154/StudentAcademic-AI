@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { apiFetch } from "@/lib/api";
 import {
   LayoutDashboard,
   Clock,
@@ -14,6 +16,9 @@ import {
   LogOut,
   GraduationCap,
   Loader2,
+  Bell,
+  CheckCheck,
+  X,
 } from "lucide-react";
 
 interface StudentShellProps {
