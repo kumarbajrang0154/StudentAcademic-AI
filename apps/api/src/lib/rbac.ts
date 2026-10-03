@@ -63,6 +63,17 @@ export interface AuthUser {
   departmentId?: string | null;
 }
 
+export function canAccessDepartment(
+  actor: { role: Role; departmentId?: string | null },
+  departmentId: string,
+): boolean {
+  if (actor.role === "ADMIN") return true;
+  if (actor.role === "HOD") {
+    return Boolean(actor.departmentId && actor.departmentId === departmentId);
+  }
+  return false;
+}
+
 export function canAccessCourse(
   user: { id: string; role: Role; departmentId?: string | null },
   course: {

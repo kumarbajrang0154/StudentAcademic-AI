@@ -21,6 +21,7 @@ import { marksRoutes } from "./routes/marks.js";
 import { mentorRoutes } from "./routes/mentor.js";
 import { interventionRoutes } from "./routes/interventions.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { adminRoutes } from "./routes/admin.js";
 import {
   authenticate,
   PERMISSION_MATRIX,
@@ -126,6 +127,10 @@ export async function buildServer(
 
   await app.register(notificationRoutes, {
     prefix: "/api/v1/notifications",
+  });
+
+  await app.register(adminRoutes, {
+    prefix: "/api/v1/admin",
   });
 
   // Scope introspection endpoint

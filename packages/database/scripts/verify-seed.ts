@@ -1,4 +1,10 @@
-import { PrismaClient, Role, RiskCategory } from "@prisma/client";
+import dotenv from 'dotenv';
+import path from 'path';
+dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
+import { PrismaClient, Role, RiskCategory, InterventionStatus } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -321,8 +327,40 @@ async function main() {
   }
   console.log("✓ Verified: Safe >= 55%, Moderate >= 12%, and Critical <= 20% on non-scripted cohort");
 
+  // 17. Module 7 Seeded Historical Interventions
+  console.log("\n🎯 Verifying Module 7 Historical Completed Interventions for Efficacy...");
+  const historicalInterventions = await prisma.intervention.findMany({
+    where: { notes: "seeded demo data" },
+    include: { student: { select: { email: true } }, course: true },
+  });
+  console.log(` - Historical completed interventions found: ${historicalInterventions.length} (expected 6)`);
+  if (historicalInterventions.length !== 6) {
+    throw new Error(`Assertion failed: expected 6 historical interventions, found ${historicalInterventions.length}`);
+  }
+
+  const nowMs = Date.now();
+  for (const intervention of historicalInterventions) {
+    if (intervention.status !== InterventionStatus.COMPLETED) {
+      throw new Error(`Assertion failed: intervention ${intervention.id} status expected COMPLETED, got ${intervention.status}`);
+    }
+    if (intervention.preScoreAvg === null || intervention.preScoreAvg === undefined) {
+      throw new Error(`Assertion failed: intervention ${intervention.id} expected preScoreAvg to be set`);
+    }
+    if (intervention.postScoreAvg !== null) {
+      throw new Error(`Assertion failed: intervention ${intervention.id} postScoreAvg should not be hardcoded (must be null)`);
+    }
+    const daysAgo = (nowMs - (intervention.scheduledAt?.getTime() ?? 0)) / (24 * 60 * 60 * 1000);
+    if (daysAgo < 35 || daysAgo > 65) {
+      throw new Error(`Assertion failed: intervention scheduledAt should be 35-60 days ago, found ${daysAgo.toFixed(1)} days`);
+    }
+    if (scriptedEmails.has(intervention.student.email)) {
+      throw new Error(`Assertion failed: historical intervention assigned to scripted student ${intervention.student.email}`);
+    }
+  }
+  console.log("✓ Verified: 6 historical interventions correctly seeded for non-scripted students with preScoreAvg and null postScoreAvg");
+
   console.log("\n====================================================");
-  console.log("✅ ALL DATABASE SEED & MODULE 2 ASSERTIONS PASSED!");
+  console.log("✅ ALL DATABASE SEED & MODULE 2 + MODULE 7 ASSERTIONS PASSED!");
   console.log("====================================================");
 }
 

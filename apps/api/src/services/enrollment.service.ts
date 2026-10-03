@@ -6,6 +6,7 @@ import {
   riskScore,
   negativeVelocityWarning,
 } from "@student-academic-ai/core";
+import { ensureEscalationCase } from "./escalation.service.js";
 
 export interface RecomputeEnrollmentResult {
   studentId: string;
@@ -175,6 +176,8 @@ export async function recomputeEnrollment(
     category,
     now,
   );
+
+  await ensureEscalationCase(studentId);
 
   return {
     studentId,
@@ -388,6 +391,19 @@ export async function recomputeCourseEnrollments(
         now,
       );
     }
+  }
+
+  const distinctCriticalStudentIds = Array.from(
+    new Set(
+      results
+        .filter((r) => r.riskCategory === RiskCategory.CRITICAL)
+        .map((r) => r.studentId),
+    ),
+  );
+  if (distinctCriticalStudentIds.length > 0) {
+    await Promise.all(
+      distinctCriticalStudentIds.map((sId) => ensureEscalationCase(sId)),
+    );
   }
 
   return results;
