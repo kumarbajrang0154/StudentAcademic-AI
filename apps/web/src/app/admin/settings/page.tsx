@@ -186,7 +186,15 @@ export default function AdminSettingsPage() {
           <span>Loading governance records...</span>
         </div>
       ) : error ? (
-        <div className="p-8 text-center text-rose-400 text-xs">{error}</div>
+        <div className="p-8 text-center text-rose-400 text-xs flex flex-col items-center gap-3">
+          <span>{error}</span>
+          <button
+            onClick={fetchData}
+            className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg text-xs font-medium transition"
+          >
+            Retry
+          </button>
+        </div>
       ) : activeTab === "RBAC" && settings ? (
         /* RBAC Matrix Table */
         <div className="p-5 bg-slate-900/60 border border-slate-800/80 rounded-xl space-y-4">

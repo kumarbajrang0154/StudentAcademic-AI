@@ -22,6 +22,7 @@ import { mentorRoutes } from "./routes/mentor.js";
 import { interventionRoutes } from "./routes/interventions.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { adminRoutes } from "./routes/admin.js";
+import { hodRoutes } from "./routes/hod.js";
 import { internalRoutes } from "./routes/internal.js";
 import { checkinFacultyRoutes, checkinStudentRoutes } from "./routes/checkin.js";
 import {
@@ -133,6 +134,10 @@ export async function buildServer(
 
   await app.register(adminRoutes, {
     prefix: "/api/v1/admin",
+  });
+
+  await app.register(hodRoutes, {
+    prefix: "/api/v1/hod",
   });
 
   await app.register(internalRoutes, {

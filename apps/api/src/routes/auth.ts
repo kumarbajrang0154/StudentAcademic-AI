@@ -81,6 +81,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (!user.isActive) {
+        return reply.status(403).send({
+          statusCode: 403,
+          error: "Forbidden",
+          message: "Account is deactivated. Contact your administrator.",
+        });
+      }
+
       const accessToken = app.jwt.sign(
         {
           id: user.id,
@@ -131,6 +139,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
           name: user.name,
           role: user.role,
           departmentId: user.departmentId,
+          isActive: user.isActive,
+          mustChangePassword: user.mustChangePassword,
         },
       });
     },
@@ -175,6 +185,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         statusCode: 404,
         error: "Not Found",
         message: `No seeded user found with role ${role}`,
+      });
+    }
+
+    if (!user.isActive) {
+      return reply.status(403).send({
+        statusCode: 403,
+        error: "Forbidden",
+        message: "Account is deactivated. Contact your administrator.",
       });
     }
 
@@ -228,6 +246,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         name: user.name,
         role: user.role,
         departmentId: user.departmentId,
+        isActive: user.isActive,
+        mustChangePassword: user.mustChangePassword,
       },
     });
   });
@@ -260,6 +280,20 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         statusCode: 401,
         error: "Unauthorized",
         message: "Invalid refresh token",
+      });
+    }
+
+    if (!existingToken.user.isActive) {
+      await prisma.refreshToken.updateMany({
+        where: { userId: existingToken.userId },
+        data: { revokedAt: new Date() },
+      });
+      reply.clearCookie("refreshToken", { path: "/" });
+      reply.clearCookie("accessToken", { path: "/" });
+      return reply.status(403).send({
+        statusCode: 403,
+        error: "Forbidden",
+        message: "Account is deactivated. Contact your administrator.",
       });
     }
 
@@ -346,6 +380,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         name: user.name,
         role: user.role,
         departmentId: user.departmentId,
+        isActive: user.isActive,
+        mustChangePassword: user.mustChangePassword,
       },
     });
   });
@@ -382,6 +418,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         name: true,
         role: true,
         departmentId: true,
+        isActive: true,
+        mustChangePassword: true,
         createdAt: true,
       },
     });
@@ -391,6 +429,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         statusCode: 404,
         error: "Not Found",
         message: "User not found",
+      });
+    }
+
+    if (!user.isActive) {
+      return reply.status(403).send({
+        statusCode: 403,
+        error: "Forbidden",
+        message: "Account is deactivated. Contact your administrator.",
       });
     }
 

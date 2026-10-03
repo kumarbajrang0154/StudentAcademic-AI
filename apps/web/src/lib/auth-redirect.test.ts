@@ -51,19 +51,28 @@ describe("getSafePostLoginRedirect", () => {
     // MENTOR cannot be redirected into faculty course management
     expect(getSafePostLoginRedirect("/faculty/courses/cuid-1", "MENTOR")).toBe("/mentor/dashboard");
 
-    // HOD and ADMIN cannot be redirected into student or mentor portals
-    expect(getSafePostLoginRedirect("/student/dashboard", "HOD")).toBe("/admin/dashboard");
-    expect(getSafePostLoginRedirect("/mentor/dashboard", "HOD")).toBe("/admin/dashboard");
+    // HOD cannot be redirected into student, mentor, or admin portals
+    expect(getSafePostLoginRedirect("/student/dashboard", "HOD")).toBe("/hod/dashboard");
+    expect(getSafePostLoginRedirect("/mentor/dashboard", "HOD")).toBe("/hod/dashboard");
+    expect(getSafePostLoginRedirect("/admin/dashboard", "HOD")).toBe("/hod/dashboard");
+    expect(getSafePostLoginRedirect("/admin/users", "HOD")).toBe("/hod/dashboard");
+
+    // ADMIN cannot be redirected into student or mentor portals
     expect(getSafePostLoginRedirect("/student/dashboard", "ADMIN")).toBe("/admin/dashboard");
     expect(getSafePostLoginRedirect("/mentor/dashboard", "ADMIN")).toBe("/admin/dashboard");
   });
 
-  it("handles HOD and ADMIN legitimate admin subpaths and role homes", () => {
-    expect(getSafePostLoginRedirect("/admin/escalations", "HOD")).toBe("/admin/escalations");
-    expect(getSafePostLoginRedirect("/admin/students", "ADMIN")).toBe("/admin/students");
-    expect(getSafePostLoginRedirect("/admin/dashboard", "HOD")).toBe("/admin/dashboard");
+  it("handles HOD and ADMIN legitimate subpaths and role homes", () => {
+    // HOD allowed on /hod subpaths
+    expect(getSafePostLoginRedirect("/hod/escalations", "HOD")).toBe("/hod/escalations");
+    expect(getSafePostLoginRedirect("/hod/students", "HOD")).toBe("/hod/students");
+    expect(getSafePostLoginRedirect("/hod/dashboard", "HOD")).toBe("/hod/dashboard");
+    expect(getSafePostLoginRedirect(null, "HOD")).toBe("/hod/dashboard");
+
+    // ADMIN allowed on both /admin and /hod subpaths
+    expect(getSafePostLoginRedirect("/admin/users", "ADMIN")).toBe("/admin/users");
     expect(getSafePostLoginRedirect("/admin/dashboard", "ADMIN")).toBe("/admin/dashboard");
-    expect(getSafePostLoginRedirect(null, "HOD")).toBe("/admin/dashboard");
+    expect(getSafePostLoginRedirect("/hod/dashboard", "ADMIN")).toBe("/hod/dashboard");
     expect(getSafePostLoginRedirect(null, "ADMIN")).toBe("/admin/dashboard");
   });
 
@@ -71,7 +80,7 @@ describe("getSafePostLoginRedirect", () => {
     expect(getSafePostLoginRedirect(null, "MENTOR")).toBe("/mentor/dashboard");
     expect(getSafePostLoginRedirect("", "FACULTY")).toBe("/faculty/dashboard");
     expect(getSafePostLoginRedirect(undefined, "STUDENT")).toBe("/student/dashboard");
-    expect(getSafePostLoginRedirect(undefined, "HOD")).toBe("/admin/dashboard");
+    expect(getSafePostLoginRedirect(undefined, "HOD")).toBe("/hod/dashboard");
     expect(getSafePostLoginRedirect(undefined, "ADMIN")).toBe("/admin/dashboard");
   });
 });

@@ -5,6 +5,8 @@ export { buildServer, buildApp, BuildServerOptions };
 export * from "./lib/rbac.js";
 export * from "./services/escalation.service.js";
 export * from "./services/admin.service.js";
+export * from "./services/hod.service.js";
+export * from "./services/admin-mgmt.service.js";
 
 const PORT = Number(process.env.PORT) || Number(process.env.API_PORT) || 4000;
 const HOST = process.env.HOST || "0.0.0.0";
